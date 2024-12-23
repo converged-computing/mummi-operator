@@ -1,0 +1,23 @@
+# permissions for end users to view minimummis.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: mummi-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: minimummi-viewer-role
+rules:
+- apiGroups:
+  - mummi.converged-computing.org
+  resources:
+  - minimummis
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mummi.converged-computing.org
+  resources:
+  - minimummis/status
+  verbs:
+  - get

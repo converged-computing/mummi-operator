@@ -1,0 +1,9 @@
+apiVersion: mummi.converged-computing.org/v1alpha1
+kind: MiniMummi
+metadata:
+  labels:
+    app.kubernetes.io/name: mummi-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: minimummi-sample
+spec:
+  # TODO(user): Add fields here

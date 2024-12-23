@@ -1,0 +1,27 @@
+# permissions for end users to edit minimummis.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: mummi-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: minimummi-editor-role
+rules:
+- apiGroups:
+  - mummi.converged-computing.org
+  resources:
+  - minimummis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mummi.converged-computing.org
+  resources:
+  - minimummis/status
+  verbs:
+  - get
