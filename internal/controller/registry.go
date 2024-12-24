@@ -31,16 +31,14 @@ import (
 func (r *MiniMummiReconciler) createRegistry(
 	ctx context.Context,
 	spec *api.MiniMummi,
-	selector map[string]string,
 ) (ctrl.Result, error) {
 
-	// Create either the headless service or broker service
+	// Check for existing registry stateful set
 	existing := &appsv1.StatefulSet{}
 	err := r.Get(ctx, types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			_, err = r.createStatefulSet(ctx, spec, selector)
-
+			_, err = r.createStatefulSet(ctx, spec)
 		}
 		return ctrl.Result{}, err
 	}
@@ -51,10 +49,13 @@ func (r *MiniMummiReconciler) createRegistry(
 func (r *MiniMummiReconciler) createStatefulSet(
 	ctx context.Context,
 	spec *api.MiniMummi,
-	selector map[string]string,
 ) (*appsv1.StatefulSet, error) {
 
-	r.log.Info("Creating stateful set for registry with: ", spec.Name, spec.Namespace)
+	mLog.Info("Creating stateful set for registry with: ", spec.Name, spec.Namespace)
+
+	// Request the selector just once
+	selector := spec.Selector()
+	pullPolicy := corev1.PullPolicy(spec.Spec.Registry.ImagePullPolicy)
 
 	// Define the StatefulSet
 	// Having a common name "registry" assumes that multiply mini-mummi in the same namespace
@@ -74,10 +75,13 @@ func (r *MiniMummiReconciler) createStatefulSet(
 				Spec: corev1.PodSpec{
 					Subdomain: spec.Name,
 					Hostname:  spec.Spec.Registry.Name,
+
+					// Container names can be consistent within pods
 					Containers: []corev1.Container{
 						{
-							Name:  "registry",
-							Image: spec.Spec.Registry.Container,
+							Name:            "registry",
+							Image:           spec.Spec.Registry.Image,
+							ImagePullPolicy: pullPolicy,
 						},
 					},
 					// Note that this is on a headless service, so we don't
@@ -92,7 +96,7 @@ func (r *MiniMummiReconciler) createStatefulSet(
 	ctrl.SetControllerReference(spec, statefulSet, r.Scheme)
 	err := r.Create(ctx, statefulSet)
 	if err != nil {
-		r.log.Error(err, "🔴 Create registry statefulset", "Name", spec.Spec.Registry.Name)
+		mLog.Error(err, "🔴 Create registry statefulset", "Name", spec.Spec.Registry.Name)
 	}
 	return statefulSet, err
 }

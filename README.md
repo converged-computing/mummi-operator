@@ -58,7 +58,9 @@ Next: wfmanager, mlserver, and rabbitmq
 - wfmanager
  - ensure we export envars 
  - when mummi python cloneable, can install (clone) on demand
- 
+- jobs:
+ - if these are volume mounts into the wfmanager container, they should be moved
+
 ### Questions
 
 - What is the difference between `MUMMI_ROOT` and `MUMMI_APP`? The second makes sense (e.g., /opt/clones/mummi-ras) but the first is always set to the second. I'd expect it be something like /opt/clones where there are more assets.

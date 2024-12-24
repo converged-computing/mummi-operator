@@ -128,7 +128,7 @@ type MummiJob struct {
 	// Namespace is inherited from MiniMummi Spec
 	// container image for createsims (should be loaded into cluster)
 	// +omitempty
-	Container string `json:"container,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// Variables are the simname (supplied by jobTracker)
 	// and output / other paths that should not be customized
@@ -435,7 +435,13 @@ type OrasConfig struct {
 	// +kubebuilder:default="ghcr.io/oras-project/registry:latest"
 	// +default="ghcr.io/oras-project/registry:latest"
 	// +optional
-	Container string `json:"container,omitempty"`
+	Image string `json:"image,omitempty"`
+
+	// Image pull policy (e.g., Always, Never, etc.)
+	// +kubebuilder:default="IfNotPresent"
+	// +default="IfNotPresent"
+	// +omitempty
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
 }
 
 type Workspace struct {
@@ -453,9 +459,45 @@ type RabbitMQ struct {
 	// credentials: "rabbitmq-credentials.json"
 	// certificate: "/opt/clones/certs/client_rabbitmq_certificate.pem"
 
+	// User (these can be generated secrets if needed for more production)
+	// +optional
+	User string `json:"user,omitempty"`
+
+	// Pass (these can be generated secrets if needed for more production)
+	// +optional
+	Pass string `json:"pass,omitempty"`
+
+	// Default vhost
+	// +kubebuilder:default="dinosaur_vhost"
+	// +default="dinosaur_vhost"
+	// +optional
+	Vhost string `json:"vhost,omitempty"`
+
 	// Broker (for example RabbitMQ) parameters
 	// +optional
 	Broker RabbitMQBroker `json:"broker,omitempty"`
+
+	// container image for rabbitmq
+	// +omitempty
+	Image string `json:"container,omitempty"`
+
+	// Image pull policy (e.g., Always, Never, etc.)
+	// +kubebuilder:default="IfNotPresent"
+	// +default="IfNotPresent"
+	// +omitempty
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
+
+	// Hostname (defaults to rabbitmq)
+	// +kubebuilder:default="rabbitmq"
+	// +default="rabbitmq"
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Replicas for the rabbit deployment
+	// +kubebuilder:default=1
+	// +default=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
 }
 
 type RabbitMQBroker struct {
@@ -686,6 +728,23 @@ func (m *MiniMummi) RegistryHost() string {
 	)
 }
 
+// The selector is how different objects (e.g,. deployment are added to the headless service)
+func (m *MiniMummi) Selector() map[string]string {
+	return map[string]string{"app": m.Name}
+}
+
+// RabbitHost returns the rabbitmq hsot
+func (m *MiniMummi) RabbitHost() string {
+
+	// rabbitmq.mini-mummi.default.svc.cluster.local
+	return fmt.Sprintf("rabbitmq.%s.%s.svc.cluster.local", m.Name, m.Namespace)
+}
+
+// RabbitmQ secret name for reference across objects
+func (m *MiniMummi) RabbitSecretName() string {
+	return fmt.Sprintf("%s-rabbit-secrets", m.Name)
+}
+
 // Cluster Role and Role names
 func (m *MiniMummi) ClusterRoleName() string {
 	return fmt.Sprintf("%s-cluster-roles", m.Name)
@@ -693,6 +752,10 @@ func (m *MiniMummi) ClusterRoleName() string {
 }
 func (m *MiniMummi) RoleName() string {
 	return fmt.Sprintf("%s-roles", m.Name)
+}
+
+func (m *MiniMummi) RabbitDeploymentName() string {
+	return fmt.Sprintf("%s-rabbitmq", m.Name)
 }
 
 // Validate ensures we have data that is needed, and sets defaults if needed

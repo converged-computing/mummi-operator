@@ -72,26 +72,26 @@ func (r *MiniMummiReconciler) createServiceAccount(
 	ctx context.Context,
 	spec *api.MiniMummi,
 ) (*corev1.ServiceAccount, error) {
-	r.log.Info("Creating service account for: ", spec.Name, spec.Namespace)
+	mLog.Info("Creating service account for: ", spec.Name, spec.Namespace)
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{Name: spec.Name, Namespace: spec.Namespace},
 	}
 	ctrl.SetControllerReference(spec, sa, r.Scheme)
 	err := r.Create(ctx, sa)
 	if err != nil {
-		r.log.Error(err, "🔴 Create cluster role", "Name", spec.Name)
+		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
 	}
 	return sa, err
 }
 
 // createClusterRole creates the cluster role to give permission for wfmanager to make objects
-// TODO delete
+// TODO delete - I don't think we need any cluster roles (or at least we should not)
 func (r *MiniMummiReconciler) createClusterRole(
 	ctx context.Context,
 	spec *api.MiniMummi,
 ) (*rbacv1.ClusterRole, error) {
 
-	r.log.Info("Creating cluster role for: ", spec.Name, spec.Namespace)
+	mLog.Info("Creating cluster role for: ", spec.Name, spec.Namespace)
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: spec.ClusterRoleName(), Namespace: spec.Namespace},
 		Rules: []rbacv1.PolicyRule{
@@ -105,7 +105,7 @@ func (r *MiniMummiReconciler) createClusterRole(
 	ctrl.SetControllerReference(spec, role, r.Scheme)
 	err := r.Create(ctx, role)
 	if err != nil {
-		r.log.Error(err, "🔴 Create cluster role", "Name", spec.Name)
+		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
 	}
 	return role, err
 }
@@ -116,7 +116,7 @@ func (r *MiniMummiReconciler) createRole(
 	spec *api.MiniMummi,
 ) (*rbacv1.Role, error) {
 
-	r.log.Info("Creating role for: ", spec.Name, spec.Namespace)
+	mLog.Info("Creating role for: ", spec.Name, spec.Namespace)
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: spec.RoleName(), Namespace: spec.Namespace},
 		Rules: []rbacv1.PolicyRule{
@@ -130,18 +130,17 @@ func (r *MiniMummiReconciler) createRole(
 	ctrl.SetControllerReference(spec, role, r.Scheme)
 	err := r.Create(ctx, role)
 	if err != nil {
-		r.log.Error(err, "🔴 Create cluster role", "Name", spec.Name)
+		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
 	}
 	return role, err
 }
 
+// createRoleBinding creates the role binding to allow wfmanager to create jobs
 func (r *MiniMummiReconciler) createRoleBinding(
 	ctx context.Context,
 	spec *api.MiniMummi,
 ) (*rbacv1.RoleBinding, error) {
-
-	// TODO I think maybe we need to make the service account?
-	r.log.Info("Creating role binding for: ", spec.Name, spec.Namespace)
+	mLog.Info("Creating role binding for: ", spec.Name, spec.Namespace)
 	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: spec.RoleName(), Namespace: spec.Namespace},
 		Subjects: []rbacv1.Subject{
@@ -160,7 +159,7 @@ func (r *MiniMummiReconciler) createRoleBinding(
 	ctrl.SetControllerReference(spec, binding, r.Scheme)
 	err := r.Create(ctx, binding)
 	if err != nil {
-		r.log.Error(err, "🔴 Create cluster role", "Name", spec.Name)
+		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
 	}
 	return binding, err
 }

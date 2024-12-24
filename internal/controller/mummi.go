@@ -18,20 +18,14 @@ import (
 	api "github.com/converged-computing/mummi-operator/api/v1alpha1"
 )
 
-// This is a MiniCluster! A MiniCluster is associated with a running MiniCluster and include:
-// 1. An indexed job with some number of pods
-// 2. Config maps for secrets and other things.
-// 3. We "launch" a job by starting the Indexed job on the connected nodes
-// ensureMiniCluster creates a new MiniCluster, a stateful set for running flux!
+// ensureMiniMummi creates a new MiniMummi
 func (r *MiniMummiReconciler) ensureMiniMummi(
 	ctx context.Context,
 	spec *api.MiniMummi,
 ) (ctrl.Result, error) {
 
 	// Create headless service for the MiniCluster OR single service for the broker
-	// The selector is how different objects (e.g,. deployment are added to the service)
-	selector := map[string]string{"app": spec.Name}
-	result, err := r.exposeServices(ctx, spec, selector)
+	result, err := r.exposeServices(ctx, spec)
 	if err != nil {
 		return result, err
 	}
@@ -46,10 +40,22 @@ func (r *MiniMummiReconciler) ensureMiniMummi(
 	// Create the registry, only if we need to!
 	// The selector is needed to add it to the headless service
 	if spec.HasInClusterRegistry() {
-		result, err := r.createRegistry(ctx, spec, selector)
+		result, err := r.createRegistry(ctx, spec)
 		if err != nil {
 			return result, err
 		}
+	}
+
+	// Create certificates as secrets to mount (not mounted yet)
+	result, err = r.createRabbitMQCerts(ctx, spec)
+	if err != nil {
+		return result, err
+	}
+
+	// Create rabbitmq deployment
+	result, err = r.createRabbitMQ(ctx, spec)
+	if err != nil {
+		return result, err
 	}
 
 	// TODO: rabbitmq and certs

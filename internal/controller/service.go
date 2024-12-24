@@ -26,7 +26,6 @@ import (
 func (r *MiniMummiReconciler) exposeServices(
 	ctx context.Context,
 	spec *api.MiniMummi,
-	selector map[string]string,
 ) (ctrl.Result, error) {
 
 	// Create either the headless service or broker service
@@ -34,8 +33,7 @@ func (r *MiniMummiReconciler) exposeServices(
 	err := r.Get(ctx, types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			_, err = r.createHeadlessService(ctx, spec, selector)
-
+			_, err = r.createHeadlessService(ctx, spec)
 		}
 		return ctrl.Result{}, err
 	}
@@ -46,21 +44,20 @@ func (r *MiniMummiReconciler) exposeServices(
 func (r *MiniMummiReconciler) createHeadlessService(
 	ctx context.Context,
 	spec *api.MiniMummi,
-	selector map[string]string,
 ) (*corev1.Service, error) {
 
-	r.log.Info("Creating headless service with: ", spec.Name, spec.Namespace)
+	mLog.Info("Creating headless service with: ", spec.Name, spec.Namespace)
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: spec.Name, Namespace: spec.Namespace},
 		Spec: corev1.ServiceSpec{
 			ClusterIP: "None",
-			Selector:  selector,
+			Selector:  spec.Selector(),
 		},
 	}
 	ctrl.SetControllerReference(spec, service, r.Scheme)
 	err := r.Create(ctx, service)
 	if err != nil {
-		r.log.Error(err, "🔴 Create service", "Service", service.Name)
+		mLog.Error(err, "🔴 Create service", "Service", service.Name)
 	}
 	return service, err
 }

@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 
-	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -32,13 +31,16 @@ import (
 	mummi "github.com/converged-computing/mummi-operator/api/v1alpha1"
 )
 
+var (
+	mLog = ctrl.Log.WithName("mummi")
+)
+
 // MiniMummiReconciler reconciles a MiniMummi object
 type MiniMummiReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	RESTClient rest.Interface
 	RESTConfig *rest.Config
-	log        logr.Logger
 }
 
 func NewMiniMummiReconciler(
@@ -47,9 +49,7 @@ func NewMiniMummiReconciler(
 	restConfig *rest.Config,
 	restClient rest.Interface,
 ) *MiniMummiReconciler {
-	logger := ctrl.Log.WithName("mummi-reconciler")
 	return &MiniMummiReconciler{
-		log:        logger,
 		Client:     client,
 		Scheme:     scheme,
 		RESTClient: restClient,
@@ -106,8 +106,8 @@ func (r *MiniMummiReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var spec mummi.MiniMummi
 
 	// Keep developer informed what is going on.
-	r.log.Info("🦛 Event received by MiniMummi controller!")
-	r.log.Info("Request: ", "req", req)
+	mLog.Info("🦛 Event received by MiniMummi controller!")
+	mLog.Info("Request: ", "req", req)
 
 	// Does the metric exist yet (based on name and namespace)
 	err := r.Get(ctx, req.NamespacedName, &spec)
@@ -115,18 +115,18 @@ func (r *MiniMummiReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		// Create it, doesn't exist yet
 		if errors.IsNotFound(err) {
-			r.log.Info("🟥️ MiniMummi not found. Ignoring since object must be deleted.")
+			mLog.Info("🔴 MiniMummi not found. Ignoring since object must be deleted.")
 
 			// This should not be necessary, but the config map isn't owned by the operator
 			return ctrl.Result{}, nil
 		}
-		r.log.Info("🟥️ Failed to get MiniMummi. Re-running reconcile.")
+		mLog.Info("🔴 Failed to get MiniMummi. Re-running reconcile.")
 		return ctrl.Result{Requeue: true}, err
 	}
 
 	// Show parameters provided and validate one flux runner
 	if !spec.Validate() {
-		r.log.Info("🟥️ Your MiniMummi config did not validate.")
+		mLog.Info("🔴 Your MiniMummi config did not validate.")
 		return ctrl.Result{}, nil
 	}
 
@@ -138,7 +138,7 @@ func (r *MiniMummiReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// By the time we get here we have a Job + pods + config maps!
 	// What else do we want to do?
-	r.log.Info("🌀 MiniMummi is Ready!")
+	mLog.Info("🌀 MiniMummi is Ready!")
 	return result, nil
 }
 
