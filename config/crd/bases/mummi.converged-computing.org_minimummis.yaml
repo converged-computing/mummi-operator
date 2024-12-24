@@ -353,6 +353,17 @@ spec:
                     default: ghcr.io/oras-project/registry:latest
                     description: Container image
                     type: string
+                  host:
+                    description: |-
+                      Note that the host is generated based on the registry name
+                      # E.g., oras push <host>/<uri>:<sample> --plain-http .
+                      If no external registry is used, we use the internal one here
+                      e.g., host is: registry-0.mini-mummi.default.svc.cluster.local:5000
+                    type: string
+                  name:
+                    default: registry
+                    description: Name for the registry (defaults to registry)
+                    type: string
                   plainHttp:
                     default: true
                     description: Assume the registry uses plain http
@@ -366,13 +377,6 @@ spec:
                     description: Replicas for the registry deployment
                     format: int32
                     type: integer
-                  string:
-                    description: |-
-                      Note that the host is generated based on the registry name
-                      # E.g., oras push <host>/<uri>:<sample> --plain-http .
-                      If no external registry is used, we use the internal one here
-                      e.g., host is: registry-0.mini-mummi.default.svc.cluster.local:5000
-                    type: string
                 type: object
               workflow:
                 description: |-

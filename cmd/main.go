@@ -165,12 +165,13 @@ func main() {
 		setupLog.Error(err, "unable to create REST client", "controller", restClient)
 	}
 
-	if err = (&controller.MiniMummiReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		RESTConfig: mgr.GetConfig(),
-		RESTClient: restClient,
-	}).SetupWithManager(mgr); err != nil {
+	reconciler := controller.NewMiniMummiReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetConfig(),
+		restClient,
+	)
+	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MiniMummi")
 		os.Exit(1)
 	}

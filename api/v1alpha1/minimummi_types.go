@@ -403,7 +403,13 @@ type OrasConfig struct {
 	// If no external registry is used, we use the internal one here
 	// e.g., host is: registry-0.mini-mummi.default.svc.cluster.local:5000
 	// +optional
-	Host string `json:"string,omitempty"`
+	Host string `json:"host,omitempty"`
+
+	// Name for the registry (defaults to registry)
+	// +kubebuilder:default="registry"
+	// +default="registry"
+	// +optional
+	Name string `json:"name,omitempty"`
 
 	// Port to use to interact with the registry
 	// +optional
@@ -678,6 +684,15 @@ func (m *MiniMummi) RegistryHost() string {
 		"registry-0.%s.%s.svc.cluster.local:%d",
 		m.Name, m.Namespace, m.Spec.Registry.Port,
 	)
+}
+
+// Cluster Role and Role names
+func (m *MiniMummi) ClusterRoleName() string {
+	return fmt.Sprintf("%s-cluster-roles", m.Name)
+
+}
+func (m *MiniMummi) RoleName() string {
+	return fmt.Sprintf("%s-roles", m.Name)
 }
 
 // Validate ensures we have data that is needed, and sets defaults if needed

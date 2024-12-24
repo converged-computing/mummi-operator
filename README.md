@@ -13,6 +13,37 @@ The Mummi Operator is intended to run MiniMummi.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
+### 1. Create Cluster
+
+```bash
+kind create cluster --config ./examples/kind-config.yaml
+```
+
+## 2. Load Images
+
+Note that we are going to load the images to make our lives easier (otherwise we need to include them with pull secrets). You might need to login and pull these first:
+
+```bash
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 633731392008.dkr.ecr.us-east-1.amazonaws.com
+docker pull 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:rabbitmq
+docker pull 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlserver
+docker pull 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:wfmanager
+docker pull 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:createsims
+docker pull 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis
+```
+
+And then load from your local machine. When we run this on EKS, we will likely have easy access to our private registry.
+
+```bash
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:rabbitmq
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlserver
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:wfmanager
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:createsims
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis
+```
+
+Next: wfmanager, mlserver, and rabbitmq
+
 ### TODO
 
 - Add debug mode for each, meaning we can start with a sleep
