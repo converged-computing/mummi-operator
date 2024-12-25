@@ -81,7 +81,7 @@ spec:
                             description: Walltime (in string format) for the job
                             type: string
                         type: object
-                      container:
+                      image:
                         description: |-
                           Namespace is inherited from MiniMummi Spec
                           container image for createsims (should be loaded into cluster)
@@ -126,7 +126,7 @@ spec:
                             description: Walltime (in string format) for the job
                             type: string
                         type: object
-                      container:
+                      image:
                         description: |-
                           Namespace is inherited from MiniMummi Spec
                           container image for createsims (should be loaded into cluster)
@@ -213,6 +213,34 @@ spec:
                             description: Name of queue to use for mummi
                             type: string
                         type: object
+                      container:
+                        description: container image for rabbitmq
+                        type: string
+                      imagePullPolicy:
+                        default: IfNotPresent
+                        description: Image pull policy (e.g., Always, Never, etc.)
+                        type: string
+                      name:
+                        default: rabbitmq
+                        description: Hostname (defaults to rabbitmq)
+                        type: string
+                      pass:
+                        description: Pass (these can be generated secrets if needed
+                          for more production)
+                        type: string
+                      replicas:
+                        default: 1
+                        description: Replicas for the rabbit deployment
+                        format: int32
+                        type: integer
+                      user:
+                        description: User (these can be generated secrets if needed
+                          for more production)
+                        type: string
+                      vhost:
+                        default: dinosaur_vhost
+                        description: Default vhost
+                        type: string
                     type: object
                   sampler:
                     description: The Sampler for the MLServer
@@ -338,6 +366,34 @@ spec:
                         description: Name of queue to use for mummi
                         type: string
                     type: object
+                  container:
+                    description: container image for rabbitmq
+                    type: string
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: Image pull policy (e.g., Always, Never, etc.)
+                    type: string
+                  name:
+                    default: rabbitmq
+                    description: Hostname (defaults to rabbitmq)
+                    type: string
+                  pass:
+                    description: Pass (these can be generated secrets if needed for
+                      more production)
+                    type: string
+                  replicas:
+                    default: 1
+                    description: Replicas for the rabbit deployment
+                    format: int32
+                    type: integer
+                  user:
+                    description: User (these can be generated secrets if needed for
+                      more production)
+                    type: string
+                  vhost:
+                    default: dinosaur_vhost
+                    description: Default vhost
+                    type: string
                 type: object
               registry:
                 description: |-
@@ -349,16 +405,20 @@ spec:
                   TLSVerify:
                     description: Assume the registry uses plain http
                     type: boolean
-                  container:
-                    default: ghcr.io/oras-project/registry:latest
-                    description: Container image
-                    type: string
                   host:
                     description: |-
                       Note that the host is generated based on the registry name
                       # E.g., oras push <host>/<uri>:<sample> --plain-http .
                       If no external registry is used, we use the internal one here
                       e.g., host is: registry-0.mini-mummi.default.svc.cluster.local:5000
+                    type: string
+                  image:
+                    default: ghcr.io/oras-project/registry:latest
+                    description: Container image
+                    type: string
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: Image pull policy (e.g., Always, Never, etc.)
                     type: string
                   name:
                     default: registry

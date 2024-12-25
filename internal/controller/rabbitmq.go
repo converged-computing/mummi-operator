@@ -56,6 +56,12 @@ func (r *MiniMummiReconciler) createRabbitMQSecret(
 		return nil, err
 	}
 
+	// Generate the rabbitmq.conf
+	conf, err := rabbitmq.NewRabbitConfig(spec)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the rabbitMQ secret with certificates
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: spec.RabbitSecretName(), Namespace: spec.Namespace},
@@ -63,6 +69,7 @@ func (r *MiniMummiReconciler) createRabbitMQSecret(
 			"server_rabbitmq_key.pem":         cert.Certificate,
 			"server_rabbitmq_certificate.pem": cert.Key,
 			"ca_certificate.pem":              cert.CA,
+			"rabbitmq.conf":                   []byte(conf),
 		},
 	}
 	ctrl.SetControllerReference(spec, secret, r.Scheme)
@@ -82,14 +89,19 @@ func (r *MiniMummiReconciler) createRabbitMQ(
 	spec *api.MiniMummi,
 ) (ctrl.Result, error) {
 
-	// TODO need to generate config maps / secrets here for:
-	// - entrypoint (matched to the entrypoint here)
-	// - rabbitmq.conf (that takes the username / password)
-	//     maybe we should generate it on the fly? Take from user yaml? something else?
+	// Check for an existing rabbitmq configmap (contains entrypoint)
+	existing := &corev1.ConfigMap{}
+	err := r.Get(ctx, types.NamespacedName{Name: spec.RabbitName(), Namespace: spec.Namespace}, existing)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			_, err = r.createRabbitEntrypoint(ctx, spec)
+		}
+		return ctrl.Result{}, err
+	}
 
 	// Check for an existing rabbitmq deployment
-	existing := &appsv1.Deployment{}
-	err := r.Get(ctx, types.NamespacedName{Name: spec.RabbitDeploymentName(), Namespace: spec.Namespace}, existing)
+	deployment := &appsv1.Deployment{}
+	err = r.Get(ctx, types.NamespacedName{Name: spec.RabbitName(), Namespace: spec.Namespace}, deployment)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = r.createRabbitDeployment(ctx, spec)
@@ -109,7 +121,35 @@ func (r *MiniMummiReconciler) createRabbitDeployment(
 	ctrl.SetControllerReference(spec, deployment, r.Scheme)
 	err := r.Create(ctx, deployment)
 	if err != nil {
-		mLog.Error(err, "🔴 Create rabbitmq deployment", "Name", spec.RabbitDeploymentName())
+		mLog.Error(err, "🔴 Create rabbitmq deployment", "Name", spec.RabbitName())
 	}
 	return deployment, err
+}
+
+// createStatefulSet creates the actual registry stateful set
+func (r *MiniMummiReconciler) createRabbitEntrypoint(
+	ctx context.Context,
+	spec *api.MiniMummi,
+) (*corev1.ConfigMap, error) {
+
+	// This entrypoint does not have customization with variables
+	// It respects the development build (not breaking it) but
+	// replacing it with updated files.
+	entrypoint := rabbitmq.NewRabbitEntrypoint()
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      spec.RabbitName(),
+			Namespace: spec.Namespace,
+		},
+		Data: map[string]string{
+			"entrypoint.sh": entrypoint,
+		},
+	}
+
+	ctrl.SetControllerReference(spec, cm, r.Scheme)
+	err := r.Create(ctx, cm)
+	if err != nil {
+		mLog.Error(err, "🔴 Create rabbitmq entrypoing configmap", "Name", spec.RabbitName())
+	}
+	return cm, err
 }

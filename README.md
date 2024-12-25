@@ -47,9 +47,6 @@ Next: wfmanager, mlserver, and rabbitmq
 ### TODO
 
 - Add debug mode for each, meaning we can start with a sleep
-- rabbitmq should come from an operator or similar?
-  - maybe not - a simple certificate generation and deployment is a safe way to start
-  - likely we want to simply generate our own certs, and having a rabbitmq deployment that scales. [generate](https://go.dev/src/crypto/tls/generate_cert.go) and [deploy](https://github.com/rabbitmq/cluster-operator/tree/eda79247f6c30d98681706aa63213c8b32152e62/docs/examples/tls)
 - oras:
   - should be setup to handle with https / ssl
   - allow for customize of port

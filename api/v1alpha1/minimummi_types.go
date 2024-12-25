@@ -754,7 +754,8 @@ func (m *MiniMummi) RoleName() string {
 	return fmt.Sprintf("%s-roles", m.Name)
 }
 
-func (m *MiniMummi) RabbitDeploymentName() string {
+// RabbitName is used for the deployment and associated configmap
+func (m *MiniMummi) RabbitName() string {
 	return fmt.Sprintf("%s-rabbitmq", m.Name)
 }
 
