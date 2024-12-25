@@ -1,0 +1,93 @@
+job_type: cg
+
+{{template "job-config" .}}
+
+# container image for createsims (should be loaded into cluster)
+image: {{ if .Job.Container }}{{ .Job.Container }}{{ else }}633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis{{ end }}
+namespace: {{ if .Namespace }}{{ .Namespace }}{{ else }}default{{ end }}
+imports:  # possibly needed for any evals
+  - mummi_ras
+
+variables:
+  simname: null # value supplied by jobTracker
+  timestamp: null # value supplied by jobTracker
+  outpath:
+    eval: mummi_ras.Naming.dir_sim('cg', '{simname}')
+  locpath:
+    eval: mummi_ras.Naming.dir_local('cg/{simname}')
+  fbpath:
+    eval: mummi_ras.Naming.dir_root('feedback-cg')
+  outfile: 'cg_analysis.out'
+
+script: |
+  . ~/.bash_profile
+  export OMPI_COMM_WORLD_RANK=1
+
+  {{ template "mummi-vars" . }}
+
+  export OMP_NUM_THREADS={{ if .Job.Config.CoresPerTask }}{{ .Job.Config.CoresPerTask }}{{ else }}6{{ end }}
+
+  simname={simname}
+  locpath=/tmp/workdir
+  outpath=/tmp/out
+  registry="registry-0.mini-mummi.default.svc.cluster.local:5000"
+
+  echo ">> simname  = $simname"
+  echo ">> outpath  = $outpath"
+  echo ">> registry = $registry"
+  echo ">> locpath  = $locpath"
+  echo ">> gmx      =" $(command -v gmx)
+  echo ">> pwd      =" $(pwd)
+  echo ">> hostname =" $(hostname)
+
+  mkdir -p $outpath
+  mkdir -p -v $locpath; cd $locpath
+
+  # cganalysis comes after createsims
+  echo "Looking for $simname with oras repo list"
+  oras repo list $registry --plain-http | grep $simname
+  echo "Pulling oras artifact to $locpath"
+  oras pull $registry/$simname:createsims --plain-http
+
+  ls
+  tar -xzvf createsims-output.tar.gz
+  cd tmp/out
+
+  # Note - for Kubernetes outpath will always be empty
+  # if we found some XTC then we take the most recent
+  cframe=0
+  echo ">> xtclast = $xtclast, cframe = $cframe"
+
+  # from mummi_ras.online.cg.cganalysis import main
+
+  # Previous command with Tom's autobind
+  # $(LAUNCHER) sh -c "autobind-12 mummi_cganalysis  -c  -d 2  --simname $simname  --path $locpath  --pathremote $outpath  --siminputs $outpath  --fstype mummi  --fbio mummi  --simbin ddcMD_GPU --minsimtime 10000000 --maxsimtime 25000000  --frameProcessBatchSize 5  --fcount $cframe  --nprocs 3 >> $outfile 2>&1"
+  time pixi run --manifest-path /pixi-env/pixi.toml mummi_cganalysis \
+                      --simname $simname \
+                      --path $locpath/tmp/out \
+                      --pathremote $outpath \
+                      --siminputs $outpath \
+                      --fstype mummi \
+                      --fbio mummi \
+                      --simbin gmx \
+                      --backend GROMACS_PARTS \
+                      --simcores 6 \
+                      --nprocs 1 \
+                      --stopsimtime 600 \
+                      --simruntime -1 \
+                      --logstdout \
+                      --loglevel 2 \
+                      --mini \
+                      --fcount $cframe 2>&1 | tee $outfile
+
+  retval=$?  
+  if [ $retval -eq 0 ] && [ -f cg_analysis.log ]; 
+    then
+      # Tar gz up the entire path (including createsims.tar.gz)
+      cd $outpath
+      tar czf cganalysis-output.tar.gz /tmp/out
+      echo "Simulation was successful, pushing result to $registry/$simname:cganalysis"
+      oras push --plain-http --insecure $registry/$simname:cganalysis cganalysis-output.tar.gz
+  fi    
+  ls $outpath
+  wait

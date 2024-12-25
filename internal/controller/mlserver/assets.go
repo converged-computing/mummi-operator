@@ -23,6 +23,10 @@ func NewEntrypoint(spec *api.MiniMummi) (map[string]string, error) {
 	data := map[string]string{
 		"entrypoint.sh": entrypointTemplate,
 	}
+	entrypoint, err := utils.PopulateTemplate(spec, entrypointTemplate)
+	if err != nil {
+		return data, err
+	}
 	script, err := utils.PopulateTemplate(spec, startTemplate)
 	if err != nil {
 		return data, err
@@ -32,9 +36,9 @@ func NewEntrypoint(spec *api.MiniMummi) (map[string]string, error) {
 		return data, err
 	}
 	return map[string]string{
-		"entrypoint.sh":       entrypointTemplate,
-		"kubernetes_start.sh": script,
 		// Copied to /opt/clones/mummi-ras/specs/kubernetes-mini
-		"mlserver.yaml": mlserverYAML,
+		"mlserver.yaml":       mlserverYAML,
+		"entrypoint.sh":       entrypoint,
+		"kubernetes_start.sh": script,
 	}, nil
 }

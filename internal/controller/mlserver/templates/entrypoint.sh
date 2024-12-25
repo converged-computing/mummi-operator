@@ -4,6 +4,6 @@
 . ~/.bash_profile
 
 # Copy the updated rabbitmq client certificate
-cp /cert_rabbitmq/client_rabbitmq_certificate.pem /opt/clones/certs/client_rabbitmq_certificate.pem
-cp /mummi_operator/mlserver.yaml /opt/clones/mummi-ras/specs/kubernetes-mini/mlserver.yaml
+cp /cert_rabbitmq/client_rabbitmq_certificate.pem {{ .Spec.Paths.Certs }}/client_rabbitmq_certificate.pem
+cp /mummi_operator/mlserver.yaml {{ .Spec.Paths.MummiRoot }}/specs/kubernetes-mini/mlserver.yaml
 pixi run /bin/bash /mummi_operator/kubernetes_start.sh

@@ -39,6 +39,211 @@ spec:
           spec:
             description: MiniMummiSpec defines the desired state of MiniMummi
             properties:
+              WorkflowManager:
+                description: |-
+                  WorkflowManager manages the workflow
+                  Most (majority) of settings are in the config, I moved all under here for a better YAML UI
+                properties:
+                  container:
+                    description: container image for the workflow manager (must be
+                      provided)
+                    type: string
+                  coresPerNode:
+                    default: 4
+                    description: Cores per node (deafults to 4) maps to NCORES_PER_NODED
+                    format: int32
+                    type: integer
+                  doMlServer:
+                    default: true
+                    description: wfmanager will contact ML server which should be
+                      running (defaults to true)
+                    type: boolean
+                  doPatchCreation:
+                    description: Should we do patch creation? (defaults to false)
+                    type: boolean
+                  doPatchSelection:
+                    default: true
+                    description: Should we do patch selection? (defaults to true)
+                    type: boolean
+                  doScheduleJobs:
+                    default: true
+                    description: Should we schedule jobs? (defaults to true)
+                    type: boolean
+                  doWorkflow:
+                    default: true
+                    description: Should we run the workflow? (defaults to true)
+                    type: boolean
+                  fbtype:
+                    default: mummi
+                    type: string
+                  feedbackAAHvrThreshold:
+                    default: "0.25"
+                    description: fbaa_hvr_th
+                    type: string
+                  feedbackCGDoWeights:
+                    description: |-
+                      Feedback Parameters --------------------------------------------------------------
+                      If true, use weight for cg to macro feedback (defaults to true)
+                      maps to fbcg_do_wts
+                    type: boolean
+                  feedbackCrdThreshold:
+                    default: "0.2"
+                    description: 'fbaa_crd_th:          0.2    # 0.1975  # Suggested
+                      range 0.2-0.3'
+                    type: string
+                  feedbackFrameIncrement:
+                    default: 25000
+                    description: 'fbaa_frame_increment: 25000  #2000  #50000 -- 2000
+                      is a test value to accelerate fb'
+                    format: int32
+                    type: integer
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: Image pull policy (e.g., Always, Never, etc.)
+                    type: string
+                  interactive:
+                    description: Run in interactive debug mode (sleep infinity)
+                    type: boolean
+                  iotype:
+                    default: mummi
+                    description: |-
+                      Filesystem and I/O ---------------------------------------------------------------
+                      what type of file system to use (valid values: 'simple' / 'taridx / dbr / mummi')
+                    type: string
+                  isGC:
+                    default: true
+                    description: is_gc == is garbage collecting? (defaults to true)
+                    type: boolean
+                  logging:
+                    description: Logging configuration and options
+                    properties:
+                      level:
+                        default: 2
+                        description: Logging level
+                        format: int32
+                        type: integer
+                      memoryUsage:
+                        description: 0 indicates deactivating the memory logging (logging
+                          memory is slow)
+                        format: int32
+                        type: integer
+                      path:
+                        description: Logging path, will default to the root workspace
+                        type: string
+                      toFile:
+                        default: -1
+                        description: Log to file (defaults to unset, -1)
+                        type: integer
+                      toStdout:
+                        default: -1
+                        description: Log to stdout (defaults to true)
+                        type: integer
+                    type: object
+                  mlserverRoundId:
+                    description: The round ID that will serve to create ml/iter{mlserver_round_id}/
+                      to store ML generated patches
+                    format: int32
+                    type: integer
+                  nodes:
+                    default: 6
+                    description: |-
+                      Mummi nodes (maps to MUMMI_NNODES) and defaults to 6
+                      This (I think) is the total number of nodes Mummi thinks it has (a max?)
+                    format: int32
+                    type: integer
+                  numberMaxCgFramesSelectionsPerIteration:
+                    default: 50
+                    description: |-
+                      nMaxCGFramesSelectionsPerIter
+                      #50  # max number of CG frames to be selected per iter
+                    format: int32
+                    type: integer
+                  numberMaxJobsPerIteration:
+                    default: 800
+                    description: |-
+                      nMaxJobsPerIter
+                      800   #7000  #1200  #400, 200  # max number of jobs to schedule per iter (including when restoring checkpoints!)
+                    format: int32
+                    type: integer
+                  numberMaxPatchesSelectionsPerIteration:
+                    default: 200
+                    description: |-
+                      nMaxPatchesSelectionsPerIter (important for ML server)
+                      max number of structures generated by ML server to be selected per iteration of the workflow
+                    format: int32
+                    type: integer
+                  numberMaxSelectedCgFrameBuffer:
+                    default: 400
+                    description: |-
+                      nMaxSelectedCGFrameBuffer
+                      400   # 280  # 500nodes, 100
+                    format: int32
+                    type: integer
+                  numberMaxSelectedPatchBuffer:
+                    default: 5000
+                    description: |-
+                      nMaxSelectedPatchBuffer (important for ML server)
+                      Max number of total structure selected. This is also the max number of creatsims at any given time
+                    format: int32
+                    type: integer
+                  numberReadPatchesPerIteration:
+                    default: 4
+                    description: |-
+                      How much work to do per iteration  -----------------------------------------------
+                      This is patches per GC
+                      Commented out: # 3300    #990  # number of macro patches to be read
+                      nReadPatchesPerIter
+                    format: int32
+                    type: integer
+                  numberSecondsPerCgFeedback:
+                    default: 600
+                    description: nSecPerCGFeedback
+                    format: int32
+                    type: integer
+                  numberSecondsPerCgSelectionUpdate:
+                    default: 30
+                    description: |-
+                      number of seconds per cg selection update (nSecPerCgSelUpdate)
+                      commend: 500 nodes this is ok but should be reduesed for 100 i.e. go to 60
+                    format: int32
+                    type: integer
+                  numberSecondsPerIterPatchCreation:
+                    default: 5
+                    description: |-
+                      Timings --------------------------------------------------------------------------
+                      number of seconds per iteration for Patch Creator (nSecPerIterPC)
+                      set to 30 for: once initial data consumed, try to match output of macro model
+                    format: int32
+                    type: integer
+                  numberSecondsPerIterWorkflow:
+                    default: 15
+                    description: |-
+                      number of seconds per iteration for the general workflow (nSecPerIterWF)
+                      15 was commented out default - number of seconds we wait after each WF iteration
+                      if a loop finished sooner, it will wait to match the frequency
+                    format: int32
+                    type: integer
+                  numberSecondsPerMacroFeedback:
+                    default: 600
+                    description: nSecPerMacroFeedback
+                    format: int32
+                    type: integer
+                  portionCGS:
+                    default: "0.5"
+                    type: string
+                  portionCSim:
+                    default: "0.5"
+                    description: |-
+                      Resource description -------------------------------------------------------------
+                      Portion are expressed as percentages (0 = 0%, 1 = 100%). The original had 0.3 for csim and 0.7 for cgsim
+                      we want to improve upon this with autoscaling, but using portions for now
+                    type: string
+                  replicas:
+                    default: 1
+                    description: Replicas for the deployment
+                    format: int32
+                    type: integer
+                type: object
               jobs:
                 description: MiniMummi Job interface, each maps to K8s job
                 properties:
@@ -184,7 +389,7 @@ spec:
                       The MLServer AutoEncoder
                       Auto-encoder (ML model) parameters
                     properties:
-                      cGPositions:
+                      Positions:
                         default: CG_pos_data_summary_pos_dis_C1_v1.npz
                         description: CG positions under the encoder path
                         type: string
@@ -197,12 +402,6 @@ spec:
                         description: |-
                           path to mummi resources ml directory
                           Defaults to one built into container for now
-                        type: string
-                    type: object
-                  generator:
-                    properties:
-                      outpath:
-                        description: Output path defaults to mummi_root / ml
                         type: string
                     type: object
                   image:
@@ -218,17 +417,22 @@ spec:
                     description: Run in interactive debug mode (sleep infinity)
                     type: boolean
                   rabbitMQ:
-                    description: The RabbitMQ message server
+                    description: |-
+                      The Workspace for the MLServer is hard coded (does not need to change)
+                      The RabbitMQ message server
                     properties:
                       broker:
                         description: Broker (for example RabbitMQ) parameters
                         properties:
                           interface:
                             default: interface
+                            description: Interface to use (defaults to rabbitmq, unlikely
+                              to change)
                             type: string
                           queue:
                             default: mummi_queue
-                            description: Name of queue to use for mummi
+                            description: Name of queue to use for mummi (defaults
+                              to mummi_queue)
                             type: string
                         type: object
                       container:
@@ -258,7 +462,9 @@ spec:
                     type: object
                   replicas:
                     default: 1
-                    description: Replicas for the mlserver deployment
+                    description: |-
+                      Replicas for the mlserver deployment
+                      Each runs on one node
                     format: int32
                     type: integer
                   sampler:
@@ -325,8 +531,9 @@ spec:
                         type: string
                     type: object
                   validator:
+                    description: We don't expose the generator or validator paths
                     properties:
-                      cleaning:
+                      cleanup:
                         default: true
                         description: Remove all the temporary files generated during
                           validations
@@ -338,9 +545,6 @@ spec:
                         default: true
                         description: perform healing on the validated structures
                         type: boolean
-                      outpath:
-                        description: Output path defaults to mummi_root / ml
-                        type: string
                       resources:
                         default: martini3-validator
                         description: |-
@@ -348,19 +552,14 @@ spec:
                           These are for Campaign 1
                         type: string
                     type: object
-                  workspace:
-                    description: The Workspace for the MLServer
-                    properties:
-                      path:
-                        description: |-
-                          path to workspace
-                          mummi_ras.Naming.dir_root('mlserver')
-                        type: string
-                    type: object
                 type: object
               paths:omitempty:
                 description: Mummi software paths, root, etc.
                 properties:
+                  certs:
+                    default: /opt/clones/certs
+                    description: Root for certificates
+                    type: string
                   mummiResources:
                     default: /opt/clones/mummi_resources
                     description: Defaults to MummiRoot if not set (eliminate this
@@ -379,10 +578,12 @@ spec:
                     properties:
                       interface:
                         default: interface
+                        description: Interface to use (defaults to rabbitmq, unlikely
+                          to change)
                         type: string
                       queue:
                         default: mummi_queue
-                        description: Name of queue to use for mummi
+                        description: Name of queue to use for mummi (defaults to mummi_queue)
                         type: string
                     type: object
                   container:
@@ -452,194 +653,6 @@ spec:
                     description: Replicas for the registry deployment
                     format: int32
                     type: integer
-                type: object
-              workflow:
-                description: |-
-                  WorkflowManager manages the workflow
-                  Most (majority) of settings are in the config, I moved all under here for a better YAML UI
-                properties:
-                  container:
-                    description: container image for the workflow manager (must be
-                      provided)
-                    type: string
-                  doMlServer:
-                    default: true
-                    description: wfmanager will contact ML server which should be
-                      running (defaults to true)
-                    type: boolean
-                  doPatchCreation:
-                    description: Should we do patch creation? (defaults to false)
-                    type: boolean
-                  doPatchSelection:
-                    default: true
-                    description: Should we do patch selection? (defaults to true)
-                    type: boolean
-                  doScheduleJobs:
-                    default: true
-                    description: Should we schedule jobs? (defaults to true)
-                    type: boolean
-                  doWorkflow:
-                    default: true
-                    description: Should we run the workflow? (defaults to true)
-                    type: boolean
-                  fbtype:
-                    default: mummi
-                    type: string
-                  feedbackAAHvrThreshold:
-                    default: "0.25"
-                    description: fbaa_hvr_th
-                    type: string
-                  feedbackCGDoWeights:
-                    description: |-
-                      Feedback Parameters --------------------------------------------------------------
-                      If true, use weight for cg to macro feedback (defaults to true)
-                      maps to fbcg_do_wts
-                    type: boolean
-                  feedbackCrdThreshold:
-                    default: "0.2"
-                    description: 'fbaa_crd_th:          0.2    # 0.1975  # Suggested
-                      range 0.2-0.3'
-                    type: string
-                  feedbackFrameIncrement:
-                    default: 25000
-                    description: 'fbaa_frame_increment: 25000  #2000  #50000 -- 2000
-                      is a test value to accelerate fb'
-                    format: int32
-                    type: integer
-                  imagePullPolicy:
-                    default: IfNotPresent
-                    description: Image pull policy (e.g., Always, Never, etc.)
-                    type: string
-                  interactive:
-                    description: Run in interactive debug mode (sleep infinity)
-                    type: boolean
-                  iotype:
-                    default: mummi
-                    description: |-
-                      Filesystem and I/O ---------------------------------------------------------------
-                      what type of file system to use (valid values: 'simple' / 'taridx / dbr / mummi')
-                    type: string
-                  isGC:
-                    default: true
-                    description: is_gc == is garbage collecting? (defaults to true)
-                    type: boolean
-                  logging:
-                    description: Logging configuration and options
-                    properties:
-                      level:
-                        default: 2
-                        description: Logging level
-                        format: int32
-                        type: integer
-                      memoryUsage:
-                        description: 0 indicates deactivating the memory logging (logging
-                          memory is slow)
-                        format: int32
-                        type: integer
-                      path:
-                        description: Logging path, will default to the root workspace
-                        type: string
-                      toFile:
-                        default: -1
-                        description: Log to file (defaults to unset, -1)
-                        type: integer
-                      toStdout:
-                        default: -1
-                        description: Log to stdout (defaults to true)
-                        type: integer
-                    type: object
-                  mlserverRoundId:
-                    description: The round ID that will serve to create ml/iter{mlserver_round_id}/
-                      to store ML generated patches
-                    format: int32
-                    type: integer
-                  numberMaxCgFramesSelectionsPerIteration:
-                    default: 50
-                    description: |-
-                      nMaxCGFramesSelectionsPerIter
-                      #50  # max number of CG frames to be selected per iter
-                    format: int32
-                    type: integer
-                  numberMaxJobsPerIteration:
-                    default: 800
-                    description: |-
-                      nMaxJobsPerIter
-                      800   #7000  #1200  #400, 200  # max number of jobs to schedule per iter (including when restoring checkpoints!)
-                    format: int32
-                    type: integer
-                  numberMaxPatchesSelectionsPerIteration:
-                    default: 200
-                    description: |-
-                      nMaxPatchesSelectionsPerIter (important for ML server)
-                      max number of structures generated by ML server to be selected per iteration of the workflow
-                    format: int32
-                    type: integer
-                  numberMaxSelectedCgFrameBuffer:
-                    default: 400
-                    description: |-
-                      nMaxSelectedCGFrameBuffer
-                      400   # 280  # 500nodes, 100
-                    format: int32
-                    type: integer
-                  numberMaxSelectedPatchBuffer:
-                    default: 5000
-                    description: |-
-                      nMaxSelectedPatchBuffer (important for ML server)
-                      Max number of total structure selected. This is also the max number of creatsims at any given time
-                    format: int32
-                    type: integer
-                  numberReadPatchesPerIteration:
-                    default: 4
-                    description: |-
-                      How much work to do per iteration  -----------------------------------------------
-                      This is patches per GC
-                      Commented out: # 3300    #990  # number of macro patches to be read
-                      nReadPatchesPerIter
-                    format: int32
-                    type: integer
-                  numberSecondsPerCgFeedback:
-                    default: 600
-                    description: nSecPerCGFeedback
-                    format: int32
-                    type: integer
-                  numberSecondsPerCgSelectionUpdate:
-                    default: 30
-                    description: |-
-                      number of seconds per cg selection update (nSecPerCgSelUpdate)
-                      commend: 500 nodes this is ok but should be reduesed for 100 i.e. go to 60
-                    format: int32
-                    type: integer
-                  numberSecondsPerIterPatchCreation:
-                    default: 5
-                    description: |-
-                      Timings --------------------------------------------------------------------------
-                      number of seconds per iteration for Patch Creator (nSecPerIterPC)
-                      set to 30 for: once initial data consumed, try to match output of macro model
-                    format: int32
-                    type: integer
-                  numberSecondsPerIterWorkflow:
-                    default: 15
-                    description: |-
-                      number of seconds per iteration for the general workflow (nSecPerIterWF)
-                      15 was commented out default - number of seconds we wait after each WF iteration
-                      if a loop finished sooner, it will wait to match the frequency
-                    format: int32
-                    type: integer
-                  numberSecondsPerMacroFeedback:
-                    default: 600
-                    description: nSecPerMacroFeedback
-                    format: int32
-                    type: integer
-                  portionCGS:
-                    default: "0.5"
-                    type: string
-                  portionCSim:
-                    default: "0.5"
-                    description: |-
-                      Resource description -------------------------------------------------------------
-                      Portion are expressed as percentages (0 = 0%, 1 = 100%). The original had 0.3 for csim and 0.7 for cgsim
-                      we want to improve upon this with autoscaling, but using portions for now
-                    type: string
                 type: object
             required:
             - paths:omitempty

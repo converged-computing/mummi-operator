@@ -1,5 +1,4 @@
 # This file describes the options that can be used for the MuMMI ML server
-
 config:
   jobname:       "mlserver"
   # 0 deactivate the memory logging (logging memory is slow)

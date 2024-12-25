@@ -54,8 +54,7 @@ These are some design decisions I've made:
 
 ### TODO
 
-- Verify MLServer needs exactly one node, add affinity
-- Add debug mode for each, meaning we can start with a sleep
+- Verify MLServer needs exactly one node, add affinity, what about wfmanager?
 - oras:
   - should be setup to handle with https / ssl
   - allow for customize of port
@@ -77,7 +76,7 @@ These are some design decisions I've made:
   - fbaa_hvr_th
   -	fbaa_crd_th        
   - fbaa_frame_increment 
-
+- I'm still not sure about purpose (and need for) `/opt/clones/mummi-ras/macro/simlist.spec`. It seems like I shouldn't need it? I haven't fully tested without it, I know there is minimally a warning without it. What is it?
 
 ## License
 

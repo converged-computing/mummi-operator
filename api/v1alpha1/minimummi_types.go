@@ -148,6 +148,19 @@ type WorkflowManager struct {
 	// +optional
 	Replicas int32 `json:"replicas,omitempty"`
 
+	// Mummi nodes (maps to MUMMI_NNODES) and defaults to 6
+	// This (I think) is the total number of nodes Mummi thinks it has (a max?)
+	// +kubebuilder:default=6
+	// +default=6
+	// +optional
+	Nodes int32 `json:"nodes,omitempty"`
+
+	// Cores per node (deafults to 4) maps to NCORES_PER_NODED
+	// +kubebuilder:default=4
+	// +default=4
+	// +optional
+	CoresPerNode int32 `json:"coresPerNode,omitempty"`
+
 	// Run in interactive debug mode (sleep infinity)
 	// +optional
 	Interactive bool `json:"interactive,omitempty"`
@@ -352,6 +365,12 @@ type MummiPaths struct {
 	// +default="/opt/clones/mummi-ras"
 	// +optional
 	MummiRoot string `json:"mummiRoot,omitempty"`
+
+	// Root for certificates
+	// +kubebuilder:default="/opt/clones/certs"
+	// +default="/opt/clones/certs"
+	// +optional
+	Certs string `json:"certs,omitempty"`
 
 	// Defaults to MummiRoot if not set (eliminate this if redundant)
 	// +kubebuilder:default="/opt/clones/mummi_resources"

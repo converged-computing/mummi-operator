@@ -1,0 +1,129 @@
+# settings for wfmanager
+wfmanager:
+  env:
+
+  config:
+    # --------------------------------------------------------------------------
+    # different run modes
+    is_gc: {{ if .Spec.WorkflowManager.IsGC }}1{{ else }}0{{ end }}
+    do_patchcreation:    {{ if .Spec.WorkflowManager.DoPatchCreation }}1{{ else }}0{{ end }}
+    do_workflow:         {{ if .Spec.WorkflowManager.DoWorkflow }}1{{ else }}0{{ end }}
+    do_schedulejobs:     {{ if .Spec.WorkflowManager.DoScheduleJobs }}1{{ else }}0{{ end }}
+    use_oras: true       # tell compatible jobs to pull artifacts from an oras registry
+
+    # E.g., oras push <host>/<uri>:<sample> --plain-http .
+    oras:
+      host: {{ .Spec.RegistryHost }}
+      plain_http: {{ if .Spec.Registry.PlainHttp }}true{{ else }}false{{ end }}
+
+    # scheduler to use (kubernetes or flux)
+    scheduler: "kubernetes"
+
+    # if 1 wfmanager will contact  ML server which should be running
+    do_mlserver:         {{ if .Spec.WorkflowManager.DoMLServer }}1{{ else }}0{{ end }}
+    # The round ID that will serve to create ml/iter{mlserver_round_id}/ to store ML generated patches
+    mlserver_round_id:   {{ .Spec.WorkflowManager.MlserverRoundId}}
+
+    # if 1 wfmanager will contact  UCG server which should be running (note that if ML server is on, UCG cannot be used and vice versa)
+    do_ucgserver:        0
+    # The round ID that will serve to create ucg/iter{ucgserver_round_id}/ to store UCG generated patches
+    ucgserver_round_id:  0
+
+    do_patchselection:   {{ if .Spec.WorkflowManager.DoPatchSelection }}1{{ else }}0{{ end }}
+    do_feedback_cg2mc:   0
+
+    do_cgselection:      0
+    do_feedback_aa2cg:   0
+
+    #do_cold_restart:    0
+    #do_recovery:        ''
+
+    # --------------------------------------------------------------------------
+    # what type of file system to use (valid values: 'simple' / 'taridx / dbr / mummi')    
+    iotype:           {{ .Spec.WorkflowManager.IoType }}
+    fbtype:           {{ .Spec.WorkflowManager.FbType }}
+
+    # --------------------------------------------------------------------------
+    # resource description
+    # Portion are expressed as percentages (0 = 0%, 1 = 100%)
+    # portion_csim:        0.3
+    # portion_cg:          0.7
+    # This I assume is portion of createsim (csim) and portion cg analysis cg)
+    portion_csim:        {{ .Spec.WorkflowManager.PortionCSim }}
+    portion_cg:          {{ .Spec.WorkflowManager.PortionCG }}
+
+    # --------------------------------------------------------------------------
+    # feedback parameters
+    # use weight for cg to macro feedback
+    fbcg_do_wts:          {{ if .Spec.WorkflowManager.FeedbackCGDoWeights }}1{{ else }}0{{ end }}
+
+    # Defaulted before to 0.25
+    fbaa_hvr_th:          {{ .Spec.WorkflowManager.FeedbackCrdThreshold }}
+
+    # Default before to 0.2
+    # 0.1975  # Suggested range 0.2-0.3
+    fbaa_crd_th:          {{ .Spec.WorkflowManager.FeedbackAAHvrThreshold }}
+    # defaulted to 25000, 2000  #50000 -- 2000 is a test value to accelerate fb
+    fbaa_frame_increment: {{ .Spec.WorkflowManager.FeedbackFrameIncrement }}
+
+    # --------------------------------------------------------------------------
+    # number of seconds per iteration for Patch Creator (nSecPerIterPC) and for the general workflow (nSecPerIterWF)
+    # if a loop finished sooner, it will wait to match the frequency
+    # 30 # Once initial data consumed, try to match output of macro model
+    # This defaults to 5
+    nSecPerIterPC:        {{ .Spec.WorkflowManager.NumberSecondsPerIterPatchCreation }}
+ 
+    # 15 Number of seconds we wait after each WF iteration
+    nSecPerIterWF:        {{ .Spec.WorkflowManager.NumberSecondsPerIterWorkflow }}
+
+    # 500 nodes this is ok but should be reduesed for 100 i.e. go to 60
+    nSecPerCgSelUpdate:   {{ .Spec.WorkflowManager.NumberSecondsPerCgSelectionUpdate }}
+
+    # These were both 600
+    nSecPerMacroFeedback: {{ .Spec.WorkflowManager.NumberSecondsPerCgSelectionUpdate }}
+    nSecPerCGFeedback:    {{ .Spec.WorkflowManager.NumberSecondsPerMacroFeedback }}
+
+    # --------------------------------------------------------------------------
+    # how much max work to do per iteration
+    # this is patches per GC (this was 4 before)
+    # 3300  #990  # number of macro patches to be read
+    nReadPatchesPerIter:            {{ .Spec.WorkflowManager.NumberReadPatchesPerIteration }}
+                                          
+    # number of CG patches to be added per run  # NOT USED
+    nReadCGFramesPerIter:           200   
+
+    # 50  # max number of CG frames to be selected per iter (this was 50)
+    nMaxCGFramesSelectionsPerIter:  {{ .Spec.WorkflowManager.NumberMaxJobsPerIteration }}
+
+    # 7000  #1200  #400, 200  # max number of jobs to schedule per iter (including when restoring checkpoints!)
+    # this was 800
+    nMaxJobsPerIter:                {{ .Spec.WorkflowManager.NumberMaxCgFramesSelectionsPerIteration }}
+
+    # 280  # 500nodes, 100 (this was 400)
+    nMaxSelectedCGFrameBuffer:      {{ .Spec.WorkflowManager.NumberMaxSelectedCgFrameBuffer }}  
+
+    # Important for ML server
+    # max number of structures generated by ML server to be selected per iteration of the workflow (default 200)
+    nMaxPatchesSelectionsPerIter:   {{ .Spec.WorkflowManager.NumberMaxPatchesSelectionsPerIteration }}
+
+    # Max number of total structure selected. This is also the max number of creatsims at any given time
+    # defaulted to 5000
+    nMaxSelectedPatchBuffer:        {{ .Spec.WorkflowManager.NumberMaxSelectedPatchBuffer }}
+
+    # --------------------------------------------------------------------------
+    jobname:     "wfmanager"
+
+    # to be read from config.yaml
+    workspace:   ''     
+
+    # Should default to 0, then 2
+    log_mem_usage: {{ .Spec.WorkflowManager.Logging.MemoryUsage }}
+
+    # When stable, change to 2 (debug is 1)
+    loglevel:   {{ .Spec.WorkflowManager.Logging.Level }}
+    logpath:    '{{ if .Spec.WorkflowManager.Logging.Path }}{{ .Spec.WorkflowManager.Logging.Path }}{{ end }}'      # empty logpath will use SPLASH_ROOT/workspace
+
+    # Logfile defaults to 1, logstdout to 0
+    # Note that not a good idea to use both
+    logfile:    {{ if eq .Spec.WorkflowManager.Logging.ToFile -1 }}1{{ else if eq .Spec.WorkflowManager.Logging.ToFile 1 }}1{{ else }}0{{ end }}
+    logstdout:  {{ if eq .Spec.WorkflowManager.Logging.ToFile -1 }}0{{ else if eq .Spec.WorkflowManager.Logging.ToFile 1 }}1{{ else }}0{{ end }}
