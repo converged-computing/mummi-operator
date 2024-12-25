@@ -1,11 +1,10 @@
 package mlserver
 
 import (
-	"bytes"
 	_ "embed"
-	"text/template"
 
 	api "github.com/converged-computing/mummi-operator/api/v1alpha1"
+	"github.com/converged-computing/mummi-operator/internal/controller/utils"
 )
 
 //go:embed templates/entrypoint.sh
@@ -14,46 +13,28 @@ var entrypointTemplate string
 //go:embed templates/kubernetes_start.sh
 var startTemplate string
 
-// StartSubs populate the Kubernetes start script
-type StartSubs struct {
-	Spec *api.MiniMummi
-}
+//go:embed templates/mlserver.yaml
+var mlserverTemplate string
 
-// newStartScript writes kubernetes_start.sh
-func newStartScript(spec *api.MiniMummi) (string, error) {
-
-	// Parse the entrypoint into a template
-	tmpl, err := template.New("start").Parse(startTemplate)
-	if err != nil {
-		return "", err
-	}
-
-	// We can write into a bytes buffer (and return as string)
-	var out bytes.Buffer
-
-	// Data for the template
-	subs := StartSubs{Spec: spec}
-
-	// Execute the template and write output to stdout
-	err = tmpl.Execute(&out, subs)
-	if err != nil {
-		return "", err
-	}
-	return out.String(), nil
-}
-
-// NewEntrypoint generates the entrypoint.sh and kubernetes_start.sh
+// NewEntrypoint generates the entrypoint.sh and kubernetes_start.sh,
+// and the mlserver.yaml that defines the machine learning server
 // as data for a config map
 func NewEntrypoint(spec *api.MiniMummi) (map[string]string, error) {
 	data := map[string]string{
 		"entrypoint.sh": entrypointTemplate,
 	}
-	script, err := newStartScript(spec)
+	script, err := utils.PopulateTemplate(spec, startTemplate)
+	if err != nil {
+		return data, err
+	}
+	mlserverYAML, err := utils.PopulateTemplate(spec, mlserverTemplate)
 	if err != nil {
 		return data, err
 	}
 	return map[string]string{
 		"entrypoint.sh":       entrypointTemplate,
 		"kubernetes_start.sh": script,
+		// Copied to /opt/clones/mummi-ras/specs/kubernetes-mini
+		"mlserver.yaml": mlserverYAML,
 	}, nil
 }

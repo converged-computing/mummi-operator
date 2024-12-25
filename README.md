@@ -49,16 +49,17 @@ Next: wfmanager, mlserver
 These are some design decisions I've made:
 
  - internal: all of the controller logic, etc. should be internal
+ - variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
  - instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
 
 ### TODO
 
+- Verify MLServer needs exactly one node, add affinity
 - Add debug mode for each, meaning we can start with a sleep
 - oras:
   - should be setup to handle with https / ssl
   - allow for customize of port
   - allow for using external artifact registry
-  - mlserver->workspace->path default (`mummi_ras.Naming.dir_root('mlserver')`)
 - wfmanager
  - ensure we export envars 
  - when mummi python cloneable, can install (clone) on demand

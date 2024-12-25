@@ -1,0 +1,110 @@
+# This file describes the options that can be used for the MuMMI ML server
+
+config:
+  jobname:       "mlserver"
+  # 0 deactivate the memory logging (logging memory is slow)
+  log_mem_usage: {{ .Spec.MLServer.Config.Logging.MemoryUsage }}
+  
+  # # When stable, change to 2 (debug is 1)
+  loglevel:      {{ .Spec.MLServer.Config.Logging.Level }}     
+
+  # # empty logpath will use ROOT/workspace
+  logpath:       '{{ if .Spec.MLServer.Config.Logging.Path }}{{ .Spec.MLServer.Config.Logging.Path }}{{ end }}'
+
+  # whether to write log to file (0 false, 1 true)
+  # In the operator, -1 is unset, 1 is yes, 0 is explicit no. We need -1 since there are different defaults
+  # If unset (-1_ we default to 0
+  logfile:       {{ if eq .Spec.MLServer.Config.Logging.ToFile 1 }}1{{ else if eq .Spec.MLServer.Config.Logging.ToFile -1 }}0{{ else }}0{{ end }}
+
+  # whether to write log to stdout (defaults to 1)
+  logstdout:       {{ if eq .Spec.MLServer.Config.Logging.Stdout 1 }}1{{ else if eq .Spec.MLServer.Config.Logging.Stdout -1 }}1{{ else }}0{{ end }}
+
+  # This is hard coded for now, since this operator only supports mini mummi and oras
+  mini_mummi:    true    # Run with mini MuMMI settings
+  flux: false            # disable flux
+  use_oras: true         # push valid artifacts to an oras registry
+
+# E.g., oras push <host>/<uri>:<sample> --plain-http .
+oras:
+  host: {{ .Spec.RegistryHost }}
+  plain_http: {{ if .Spec.Registry.PlainHttp }}true{{ else }}false{{ end }}
+  tls_verify: {{ if .Spec.Registry.TLSVerify }}true{{ else }}false{{ end }}
+
+workspace:
+  path:
+    eval: mummi_ras.Naming.dir_root('mlserver')
+  # The file where the credentials are stored
+  credentials: "rabbitmq-credentials.json"
+  # The file where the TLS certificate is stored
+  certificate: "/opt/clones/certs/client_rabbitmq_certificate.pem"
+
+# Broker (for example RabbitMQ) parameters
+broker:
+  interface:   "{{ .Spec.RabbitMQ.Broker.Interface }}"     # should default to rabbitmq
+  queue:       "{{ .Spec.RabbitMQ.Broker.Queue }}"  # should default to mummi_queue
+
+# Auto-encoder (ML model) parameters
+encoder:
+  # should default to /opt/clones/mummi_resources/ml
+  path: {{ .Spec.MLServer.Encoder.Path }}
+  # This will be added to the container via an artifact
+  # currently should default to "chonky-model"
+  model: "{{ .Spec.MLServer.Encoder.Model }}"
+
+  # Should default to CG_pos_data_summary_pos_dis_C1_v1.npz
+  cg_positions: "{{ .Spec.MLServer.Encoder.Positions }}"
+  # TODO get these from Loic
+  # path: "/lustre/orion/lrn005/proj-shared/training-data/mummi_large_resources/mini_mummi/"
+  # model: "model-protein_latent_space-mini_mummi_ls-c2289_z32-t2024-10-01-23-33-17_h443704"
+
+sampler:
+  interpolator: "ot_feedback" # Type of sampler used. Can be "naive", "ot" or "ot_feedback"
+   # Pickle file of pre-computed interpolator (will override most settings here if chosen)
+  pre_computed: ""
+  outpath:
+    eval: mummi_ras.Naming.dir_root('ml')
+  feedback:
+    do_feedback: {{ if .Spec.MLServer.Sampler.Enabled }}true{{ else }}false{{ end }}
+
+    # should default to db-feedback-sampling.npz
+    # The feedback database used for sampling (createsims status and validation)
+    database: "{{ .Spec.MLServer.Sampler.Feedback.Database }}" 
+    # Should default to db-feedback-frames.npz
+    # The feedback database used for sampling  (feedback frames from cganalysis)
+    frame_database: "{{ .Spec.MLServer.Sampler.Feedback.FrameDatabase }}" 
+
+  # This factor defines the number of extra structures we will generate
+  # Example: if =2, we will select <= 2 * nMaxSelectedPatchBuffer structures
+  # It is useful when many createsims are failing and we need to generate more
+  factor_extra_structures: {{ .Spec.MLServer.Sampler.FactorExtraStructures }}
+  # Number of neighbors (used to calculate the k nearest neighbors)
+  kneighbors: {{ .Spec.MLServer.Sampler.Kneighbors }}
+  # Define lower bound for paramter lambda that will define how far from training data we are sampling
+  lambda_lowerbound: {{ .Spec.MLServer.Sampler.LambdaLowerbound }}
+  # Define upper bound for parameter lambda
+  lambda_upperbound: {{ .Spec.MLServer.Sampler.LambdaUpperbound }}
+  # Define the number of iterations used by the optimal transport package
+  num_iter_max: {{ .Spec.MLServer.Sampler.NumberIterationsMax }}
+  # This parameter defines the fraction of A and B that will actually be used (0.1 = 10%)
+  # This was 0.3 before, needs to be > 0.5 and less than 1 (original was 1.0)
+  sub_sample_frac: {{ .Spec.MLServer.Sampler.SubSampleFraction }}
+
+generator:
+  outpath:
+    eval: mummi_ras.Naming.dir_root('ml')
+
+validator:
+  # # perform healing on the validated structures
+  healing: {{ if .Spec.MLServer.Validator.Healing }}true{{ else }}false{{ end }}
+  # # Remove all the temporary files generated during validations
+  cleanup: {{ if .Spec.MLServer.Validator.Cleanup }}true{{ else }}false{{ end }}
+  outpath:
+    eval: mummi_ras.Naming.dir_root('ml')
+  # Name of the folder in the mummi_resources to pull out
+  # For Pre-campaign 3
+  ## resources: "ml-validator"
+  ## complex: "RAS-RAF_state_ma_0.gro"
+  # For Campaign 1 defaults to martini3-validator
+  resources: "{{ .Spec.MLServer.Validator.Resources }}"
+  # Defaults to ras-rbdcrd-ref-CG.gro
+  complex: "{{ .Spec.MLServer.Validator.Complex }}"

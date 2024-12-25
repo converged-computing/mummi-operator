@@ -65,7 +65,12 @@ func (r *MiniMummiReconciler) ensureMiniMummi(
 		return result, err
 	}
 
-	// TODO: wfmanager
+	// Create the wfmanager deployment
+	result, err = r.ensureWorkflowManager(ctx, spec)
+	if err != nil {
+		return result, err
+	}
+
 	// TODO: look into labels for autoscaler for jobs that wfmanager creates
 	return ctrl.Result{}, nil
 }

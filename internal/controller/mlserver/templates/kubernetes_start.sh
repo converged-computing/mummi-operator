@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # For now assume we are running on 1 node per ML server (one pod).
+# The way to scale this is with replicas, but each is still one node
 # If we expand that, it will still be one pod per node.
-mummi_mlserver_nnodes={{ if .Spec.MLServer.Nodes }}{{ .Spec.MLServer.Nodes }}{{ else }}1{{ end }}
+mummi_mlserver_nnodes=${1:-1}
 
 # Use provided container mummi_ras
 MUMMI_APP={{ if .Spec.Paths.MummiApp }}{{ .Spec.Paths.MummiApp }}{{ else }}/opt/clones/mummi-ras{{ end }}

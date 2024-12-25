@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// createCerts creates a secret with cert.pem and key.pem
+// ensure the MLServer deployment is created
 func (r *MiniMummiReconciler) ensureMLServer(
 	ctx context.Context,
 	spec *api.MiniMummi,
