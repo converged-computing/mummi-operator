@@ -19,11 +19,72 @@ import (
 
 type Certs struct {
 	Certificate []byte // cert.pem
+	Client      []byte // client.pem
 	Key         []byte // key.pem
 	CA          []byte // ca_certificate.pem
 
 	// I don't think we need this, but I'm not sure
 	ServerCert *tls.Certificate
+}
+
+// generateX509 generates a server or client certificate
+func generateX509(
+	notValidBefore, notValidAfter time.Time,
+	serialNumber *big.Int,
+	subject pkix.Name,
+	priv *rsa.PrivateKey,
+	isClient bool,
+	host string,
+) ([]byte, error) {
+
+	// ECDSA, ED25519 and RSA subject keys should have the DigitalSignature
+	// KeyUsage bits set in the x509.Certificate template
+	keyUsage := x509.KeyUsageDigitalSignature
+
+	// RSA subject keys should have the KeyEncipherment KeyUsage bits set
+	// For TLS this is for key exchange / auth
+	keyUsage |= x509.KeyUsageKeyEncipherment
+
+	// Create the x509 Certificate (server certificate)
+	template := x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               subject,
+		NotBefore:             notValidBefore,
+		NotAfter:              notValidAfter,
+		KeyUsage:              keyUsage,
+		BasicConstraintsValid: true,
+	}
+
+	// Create the x509 Certificate (client certificate)
+	// Generating client cert is the same, but ExtKeyUsage should be set to x509.ExtKeyUsageClientAuth
+	if isClient {
+		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	} else {
+		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	}
+
+	// Parse hosts
+	hosts := strings.Split(host, ",")
+
+	for _, h := range hosts {
+		ip := net.ParseIP(h)
+		if ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+
+	// Generate the public key
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.PublicKey, priv)
+	if err != nil {
+		return nil, err
+	}
+
+	// Write the certificate (cert.pem) to a buffer
+	var certOut bytes.Buffer
+	err = pem.Encode(&certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+	return certOut.Bytes(), err
 }
 
 // generateCA generates the certificate authority "CA" certificate
@@ -96,49 +157,35 @@ func GenerateCertificates(host string) (*Certs, error) {
 	}
 	certs.CA = caBytes
 
-	// ECDSA, ED25519 and RSA subject keys should have the DigitalSignature
-	// KeyUsage bits set in the x509.Certificate template
-	keyUsage := x509.KeyUsageDigitalSignature
-
-	// RSA subject keys should have the KeyEncipherment KeyUsage bits set
-	// For TLS this is for key exchange / auth
-	keyUsage |= x509.KeyUsageKeyEncipherment
-
-	// Create the x509 Certificate
-	template := x509.Certificate{
-		SerialNumber:          serialNumber,
-		Subject:               subject,
-		NotBefore:             notValidBefore,
-		NotAfter:              notValidAfter,
-		KeyUsage:              keyUsage,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-	// Parse hosts
-	hosts := strings.Split(host, ",")
-
-	for _, h := range hosts {
-		ip := net.ParseIP(h)
-		if ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
-		} else {
-			template.DNSNames = append(template.DNSNames, h)
-		}
-	}
-
-	// Generate the public key from the private
-	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.PublicKey, priv)
+	// This is the server certificate
+	serverCert, err := generateX509(
+		notValidBefore,
+		notValidAfter,
+		serialNumber,
+		subject,
+		priv,
+		false,
+		host,
+	)
 	if err != nil {
 		return &certs, err
 	}
 
-	// Write the certificate (cert.pem) to a buffer
-	var certOut bytes.Buffer
-	err = pem.Encode(&certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+	// ...and the client certificate!
+	clientCert, err := generateX509(
+		notValidBefore,
+		notValidAfter,
+		serialNumber,
+		subject,
+		priv,
+		true,
+		host,
+	)
 	if err != nil {
 		return &certs, err
 	}
-	certs.Certificate = certOut.Bytes()
+	certs.Certificate = serverCert
+	certs.Client = clientCert
 
 	// These are the permissions we will need
 	// keyOut, err := os.OpenFile("key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -155,10 +202,10 @@ func GenerateCertificates(host string) (*Certs, error) {
 
 	// Generate a TLS server certificate keypair
 	// Not sure if we need this, might as well make it
-	serverCert, err := tls.X509KeyPair(certs.Certificate, certs.Key)
+	pairCert, err := tls.X509KeyPair(certs.Certificate, certs.Key)
 	if err != nil {
 		return nil, err
 	}
-	certs.ServerCert = &serverCert
+	certs.ServerCert = &pairCert
 	return &certs, nil
 }

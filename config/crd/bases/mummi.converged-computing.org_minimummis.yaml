@@ -139,10 +139,6 @@ spec:
                   config:
                     description: Config is the MLServer configuration
                     properties:
-                      jobName:
-                        default: mlserver
-                        description: Name for the machine learning server
-                        type: string
                       logging:
                         description: Logging configuration and options
                         properties:
@@ -172,6 +168,16 @@ spec:
                         default: true
                         description: Run with MiniMummi settings (defaults to true)
                         type: boolean
+                      nodes:
+                        default: 1
+                        description: Number of nodes (defaults to 1)
+                        format: int32
+                        type: integer
+                      threads:
+                        default: 4
+                        description: OMP_NUM_THREADS (defaults to 4)
+                        format: int32
+                        type: integer
                     type: object
                   encoder:
                     description: |-
@@ -199,6 +205,18 @@ spec:
                         description: Output path defaults to mummi_root / ml
                         type: string
                     type: object
+                  image:
+                    description: |-
+                      Namespace is inherited from MiniMummi Spec
+                      container image for MLServer (should be loaded into cluster)
+                    type: string
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: Image pull policy (e.g., Always, Never, etc.)
+                    type: string
+                  interactive:
+                    description: Run in interactive debug mode (sleep infinity)
+                    type: boolean
                   rabbitMQ:
                     description: The RabbitMQ message server
                     properties:
@@ -220,10 +238,6 @@ spec:
                         default: IfNotPresent
                         description: Image pull policy (e.g., Always, Never, etc.)
                         type: string
-                      name:
-                        default: rabbitmq
-                        description: Hostname (defaults to rabbitmq)
-                        type: string
                       pass:
                         description: Pass (these can be generated secrets if needed
                           for more production)
@@ -242,6 +256,11 @@ spec:
                         description: Default vhost
                         type: string
                     type: object
+                  replicas:
+                    default: 1
+                    description: Replicas for the mlserver deployment
+                    format: int32
+                    type: integer
                   sampler:
                     description: The Sampler for the MLServer
                     properties:
@@ -373,10 +392,6 @@ spec:
                     default: IfNotPresent
                     description: Image pull policy (e.g., Always, Never, etc.)
                     type: string
-                  name:
-                    default: rabbitmq
-                    description: Hostname (defaults to rabbitmq)
-                    type: string
                   pass:
                     description: Pass (these can be generated secrets if needed for
                       more production)
@@ -443,6 +458,10 @@ spec:
                   WorkflowManager manages the workflow
                   Most (majority) of settings are in the config, I moved all under here for a better YAML UI
                 properties:
+                  container:
+                    description: container image for the workflow manager (must be
+                      provided)
+                    type: string
                   doMlServer:
                     default: true
                     description: wfmanager will contact ML server which should be
@@ -487,6 +506,13 @@ spec:
                       is a test value to accelerate fb'
                     format: int32
                     type: integer
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: Image pull policy (e.g., Always, Never, etc.)
+                    type: string
+                  interactive:
+                    description: Run in interactive debug mode (sleep infinity)
+                    type: boolean
                   iotype:
                     default: mummi
                     description: |-
@@ -497,10 +523,6 @@ spec:
                     default: true
                     description: is_gc == is garbage collecting? (defaults to true)
                     type: boolean
-                  jobName:
-                    default: wfmanager
-                    description: Name for the workflow manager
-                    type: string
                   logging:
                     description: Logging configuration and options
                     properties:

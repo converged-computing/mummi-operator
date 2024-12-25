@@ -99,7 +99,7 @@ func NewRabbitDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					Subdomain:  spec.Name,
-					Hostname:   spec.Spec.RabbitMQ.Name,
+					Hostname:   "rabbitmq",
 					Containers: []corev1.Container{container},
 					Volumes:    volumes,
 				},

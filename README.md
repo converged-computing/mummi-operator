@@ -42,7 +42,14 @@ kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:c
 kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis
 ```
 
-Next: wfmanager, mlserver, and rabbitmq
+Next: wfmanager, mlserver
+
+## Design
+
+These are some design decisions I've made:
+
+ - internal: all of the controller logic, etc. should be internal
+ - instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
 
 ### TODO
 
@@ -57,6 +64,7 @@ Next: wfmanager, mlserver, and rabbitmq
  - when mummi python cloneable, can install (clone) on demand
 - jobs:
  - if these are volume mounts into the wfmanager container, they should be moved
+- mlserver model should eventually be customizable (currently built into container)
 
 ### Questions
 
@@ -68,6 +76,7 @@ Next: wfmanager, mlserver, and rabbitmq
   - fbaa_hvr_th
   -	fbaa_crd_th        
   - fbaa_frame_increment 
+
 
 ## License
 

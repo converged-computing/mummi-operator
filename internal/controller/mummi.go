@@ -47,19 +47,24 @@ func (r *MiniMummiReconciler) ensureMiniMummi(
 	}
 
 	// Create certificates as secrets to mount (not mounted yet)
-	result, err = r.createRabbitMQCerts(ctx, spec)
+	result, err = r.ensureRabbitMQCerts(ctx, spec)
 	if err != nil {
 		return result, err
 	}
 
 	// Create rabbitmq deployment
-	result, err = r.createRabbitMQ(ctx, spec)
+	result, err = r.ensureRabbitMQ(ctx, spec)
 	if err != nil {
 		return result, err
 	}
 
-	// TODO: rabbitmq and certs
-	// TODO: mlserver (can be started first) - data to start built into image
+	// Create MLServer deployment
+	// The data is currently built into container - maybe should be volume instead
+	result, err = r.ensureMLServer(ctx, spec)
+	if err != nil {
+		return result, err
+	}
+
 	// TODO: wfmanager
 	// TODO: look into labels for autoscaler for jobs that wfmanager creates
 	return ctrl.Result{}, nil

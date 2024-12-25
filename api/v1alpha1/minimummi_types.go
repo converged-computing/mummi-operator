@@ -139,14 +139,12 @@ type MummiJob struct {
 // Most (majority) of settings are in the config, I moved all under here for a better YAML UI
 type WorkflowManager struct {
 
-	// Name for the workflow manager
-	// +kubebuilder:default="wfmanager"
-	// +default="wfmanager"
-	// +optional
-	JobName string `json:"jobName"`
-
 	// Original had a config, but most
 	// Original has env: that was empty, leaving out
+
+	// Run in interactive debug mode (sleep infinity)
+	// +optional
+	Interactive bool `json:"interactive,omitempty"`
 
 	// Logging configuration and options
 	// +optional
@@ -329,6 +327,16 @@ type WorkflowManager struct {
 	// +default=5000
 	// +optional
 	NumberMaxSelectedPatchBuffer int32 `json:"numberMaxSelectedPatchBuffer,omitempty"`
+
+	// container image for the workflow manager (must be provided)
+	// +omitempty
+	Image string `json:"container,omitempty"`
+
+	// Image pull policy (e.g., Always, Never, etc.)
+	// +kubebuilder:default="IfNotPresent"
+	// +default="IfNotPresent"
+	// +omitempty
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
 }
 
 type MummiPaths struct {
@@ -376,11 +384,17 @@ type Logging struct {
 
 type MLServerConfig struct {
 
-	// Name for the machine learning server
-	// +kubebuilder:default="mlserver"
-	// +default="mlserver"
+	// Number of nodes (defaults to 1)
+	// +kubebuilder:default=1
+	// +default=1
 	// +optional
-	JobName string `json:"jobName"`
+	Nodes int32 `json:"nodes,omitempty"`
+
+	// OMP_NUM_THREADS (defaults to 4)
+	// +kubebuilder:default=4
+	// +default=4
+	// +optional
+	Threads int32 `json:"threads,omitempty"`
 
 	// Logging configuration and options
 	// +optional
@@ -486,12 +500,6 @@ type RabbitMQ struct {
 	// +default="IfNotPresent"
 	// +omitempty
 	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
-
-	// Hostname (defaults to rabbitmq)
-	// +kubebuilder:default="rabbitmq"
-	// +default="rabbitmq"
-	// +optional
-	Name string `json:"name,omitempty"`
 
 	// Replicas for the rabbit deployment
 	// +kubebuilder:default=1
@@ -625,6 +633,16 @@ type MLServerGenerator struct {
 
 type MLServer struct {
 
+	// Run in interactive debug mode (sleep infinity)
+	// +optional
+	Interactive bool `json:"interactive,omitempty"`
+
+	// Replicas for the mlserver deployment
+	// +kubebuilder:default=1
+	// +default=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+
 	// Config is the MLServer configuration
 	// +optional
 	Config MLServerConfig `json:"config"`
@@ -650,7 +668,18 @@ type MLServer struct {
 	Generator MLServerGenerator `json:"generator,omitempty"`
 
 	// +optional
-	Validator MLServerValidator `json:"validator"`
+	Validator MLServerValidator `json:"validator,omitempty"`
+
+	// Image pull policy (e.g., Always, Never, etc.)
+	// +kubebuilder:default="IfNotPresent"
+	// +default="IfNotPresent"
+	// +omitempty
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
+
+	// Namespace is inherited from MiniMummi Spec
+	// container image for MLServer (should be loaded into cluster)
+	// +omitempty
+	Image string `json:"image,omitempty"`
 }
 
 type MLServerValidator struct {
@@ -745,6 +774,11 @@ func (m *MiniMummi) RabbitSecretName() string {
 	return fmt.Sprintf("%s-rabbit-secrets", m.Name)
 }
 
+// MLServer Name
+func (m *MiniMummi) MLServerName() string {
+	return fmt.Sprintf("%s-mlserver", m.Name)
+}
+
 // Cluster Role and Role names
 func (m *MiniMummi) ClusterRoleName() string {
 	return fmt.Sprintf("%s-cluster-roles", m.Name)
@@ -772,6 +806,20 @@ func (m *MiniMummi) Validate() bool {
 		m.Spec.Registry.Port = 5000
 	}
 	fmt.Printf("🦛 MiniMummi.Spec.Registry %s\n", m.RegistryHost())
+
+	// Validate we've been provided containers (that are private)
+	if m.Spec.MLServer.Image == "" {
+		fmt.Println("👉 MiniMummi.Spec.MLServer.Image is not defined")
+		return false
+	}
+	if m.Spec.RabbitMQ.Image == "" {
+		fmt.Println("👉 MiniMummi.Spec.RabbitMQ.Image is not defined")
+		return false
+	}
+	if m.Spec.Workflow.Image == "" {
+		fmt.Println("👉 MiniMummi.Spec.Workflow.Image is not defined")
+		return false
+	}
 
 	// TODO
 	// set default oras registry stuff if external not provided (mlserver and wfmanager have oras)
