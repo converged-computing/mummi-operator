@@ -76,7 +76,7 @@ func generateX509(
 	}
 
 	// Generate the public key
-	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.PublicKey, priv)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ config:
   log_mem_usage: {{ .Spec.MLServer.Config.Logging.MemoryUsage }}
   
   # # When stable, change to 2 (debug is 1)
-  loglevel:      {{ .Spec.MLServer.Config.Logging.Level }}     
+  loglevel:      {{ .Spec.MLServer.Config.Logging.Level }}
 
   # # empty logpath will use ROOT/workspace
   logpath:       '{{ if .Spec.MLServer.Config.Logging.Path }}{{ .Spec.MLServer.Config.Logging.Path }}{{ end }}'
@@ -16,16 +16,16 @@ config:
   logfile:       {{ if eq .Spec.MLServer.Config.Logging.ToFile 1 }}1{{ else if eq .Spec.MLServer.Config.Logging.ToFile -1 }}0{{ else }}0{{ end }}
 
   # whether to write log to stdout (defaults to 1)
-  logstdout:       {{ if eq .Spec.MLServer.Config.Logging.Stdout 1 }}1{{ else if eq .Spec.MLServer.Config.Logging.Stdout -1 }}1{{ else }}0{{ end }}
+  logstdout:       {{ if eq .Spec.MLServer.Config.Logging.ToStdout 1 }}1{{ else if eq .Spec.MLServer.Config.Logging.ToStdout -1 }}1{{ else }}0{{ end }}
 
   # This is hard coded for now, since this operator only supports mini mummi and oras
-  mini_mummi:    true    # Run with mini MuMMI settings
+  mini_mummi: true    # Run with mini MuMMI settings
   flux: false            # disable flux
   use_oras: true         # push valid artifacts to an oras registry
 
 # E.g., oras push <host>/<uri>:<sample> --plain-http .
 oras:
-  host: {{ .Spec.RegistryHost }}
+  host: {{ .Mummi.RegistryHost }}
   plain_http: {{ if .Spec.Registry.PlainHttp }}true{{ else }}false{{ end }}
   tls_verify: {{ if .Spec.Registry.TLSVerify }}true{{ else }}false{{ end }}
 
@@ -63,7 +63,7 @@ sampler:
   outpath:
     eval: mummi_ras.Naming.dir_root('ml')
   feedback:
-    do_feedback: {{ if .Spec.MLServer.Sampler.Enabled }}true{{ else }}false{{ end }}
+    do_feedback: {{ if .Spec.MLServer.Sampler.Feedback.Enabled }}true{{ else }}false{{ end }}
 
     # should default to db-feedback-sampling.npz
     # The feedback database used for sampling (createsims status and validation)
@@ -94,9 +94,9 @@ generator:
 
 validator:
   # # perform healing on the validated structures
-  healing: {{ if .Spec.MLServer.Validator.Healing }}true{{ else }}false{{ end }}
+  healing: {{ if .Spec.MLServer.Validator.NoHealing }}false{{ else }}true{{ end }}
   # # Remove all the temporary files generated during validations
-  cleanup: {{ if .Spec.MLServer.Validator.Cleanup }}true{{ else }}false{{ end }}
+  cleanup: {{ if .Spec.MLServer.Validator.NoCleanup }}false{{ else }}true{{ end }}
   outpath:
     eval: mummi_ras.Naming.dir_root('ml')
   # Name of the folder in the mummi_resources to pull out

@@ -18,8 +18,43 @@ package v1alpha1
 
 import (
 	"fmt"
+	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var (
+	// Validation
+	validSamplerInterpolator = []string{"ot_feedback", "naive", "ot"}
+	validSaveTypes           = []string{"simple", "tardix", "dbr", "mummi"}
+
+	// Easy access to default values set on validate
+	defaultValidatorComplex   = "ras-rbdcrd-ref-CG.gro"
+	defaultValidatorResources = "martini3-validator"
+
+	defaultBrokerInterface = "rabbitmq"
+	defaultBrokerQueue     = "mummi_queue"
+
+	defaultEncoderModel     = "chonky-model"
+	defaultEncoderPositions = "CG_pos_data_summary_pos_dis_C1_v1.npz"
+
+	defaultFeedbackDatabase      = "db-feedback-sampling.npz"
+	defaultFeedbackFrameDatabase = "db-feedback-frames.npz"
+
+	defaultPathCerts      = "/opt/clones/certs"
+	defaultPathsMummiRoot = "/opt/clones/mummi-ras"
+	defaultPathsResources = "/opt/clones/mummi_resources"
+
+	defaultRegistryName       = "registry"
+	defaultRegistryPort int32 = 5000
+
+	defaultSamplerFactorExtraStructures int32 = 2
+	defaultSamplerInterpolator                = "ot_feedback"
+	defaultSamplerIterationsMax         int32 = 1000000
+	defaultSamplerKneighbors            int32 = 10
+	defaultSamplerLambdaUpperBound      int32 = 1
+	defaultSamplerSubSampleFraction           = "0.051"
+	defaultSaveType                           = "mummi"
 )
 
 // Note from vsoch: fields are exposed that are meaningful to edit. Fields such as job type
@@ -38,12 +73,12 @@ type MiniMummiSpec struct {
 
 	// Mummi software paths, root, etc.
 	// +omitempty
-	Paths MummiPaths `json:"paths:omitempty"`
+	Paths MummiPaths `json:"paths,omitempty"`
 
 	// Core components that run regardless of the job type
 	MLServer        MLServer        `json:"mlserver,omitempty"`
 	RabbitMQ        RabbitMQ        `json:"rabbitmq,omitempty"`
-	WorkflowManager WorkflowManager `json:"WorkflowManager,omitempty"`
+	WorkflowManager WorkflowManager `json:"manager,omitempty"`
 
 	// MiniMummi Job interface, each maps to K8s job
 	// +optional
@@ -55,7 +90,7 @@ type MummiJobs struct {
 
 	// CGanalysis holds the cganalysis job
 	//+optional
-	CgAnalysis MummiJob `json:"cgAnalysis"`
+	CgAnalysis MummiJob `json:"cganalysis"`
 
 	// CreateSim holds the createsim job
 	//+optional
@@ -89,7 +124,7 @@ type JobConfig struct {
 	// +kubebuilder:default=1
 	// +default=1
 	// +optional
-	NumberProcs int32 `json:"numberProcs,omitempty"`
+	Nproc int32 `json:"nproc,omitempty"`
 
 	// Cores per task per job
 	// 6 frontier / 3 summit / 5 on lassen (vsoch: this used to be 6 default)
@@ -99,8 +134,6 @@ type JobConfig struct {
 	CoresPerTask int32 `json:"coresPerTask,omitempty"`
 
 	// GPUs per job
-	// +kubebuilder:default=1
-	// +default=1
 	// +optional
 	Gpus int32 `json:"gpus,omitempty"`
 
@@ -126,7 +159,7 @@ type MummiJob struct {
 	Config JobConfig `json:"config,omitempty"`
 
 	// Namespace is inherited from MiniMummi Spec
-	// container image for createsims (should be loaded into cluster)
+	// container image for job (createsim or cganalysis)
 	// +omitempty
 	Image string `json:"image,omitempty"`
 
@@ -349,7 +382,7 @@ type WorkflowManager struct {
 
 	// container image for the workflow manager (must be provided)
 	// +omitempty
-	Image string `json:"container,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// Image pull policy (e.g., Always, Never, etc.)
 	// +kubebuilder:default="IfNotPresent"
@@ -379,6 +412,8 @@ type MummiPaths struct {
 	MummiResources string `json:"mummiResources,omitempty"`
 }
 
+// Logging defaults logging across components. Defaults should be set elsewhere
+// TODO: we can expose a more intuitive "debug" true/false function for the user across all logging types
 type Logging struct {
 	// 0 indicates deactivating the memory logging (logging memory is slow)
 	// +optional
@@ -425,18 +460,15 @@ type MLServerConfig struct {
 	// +optional
 	Logging Logging `json:"logging,omitempty"`
 
-	// Run with MiniMummi settings (defaults to true)
-	// +kubebuilder:default=true
-	// +default=true
-	// +optional
-	MiniMummi bool `json:"miniMummi,omitempty"`
-
+	// mummi is hard coded to true - there is no other
+	// option currently.
 	// Note that flux is disabled by default, and use_oras enabled
 }
 
 // OrasConfig holds configuration values for the registry to be deployed
 // TODO add support for https and credentials, along with remote option
 type OrasConfig struct {
+
 	// Note that the host is generated based on the registry name
 	// # E.g., oras push <host>/<uri>:<sample> --plain-http .
 	// If no external registry is used, we use the internal one here
@@ -454,13 +486,11 @@ type OrasConfig struct {
 	// +optional
 	Port int32 `json:"port,omitempty"`
 
-	// Assume the registry uses plain http
-	// +kubebuilder:default=true
-	// +default=true
+	// Assume the registry doesn't use plain http
 	// +optional
-	PlainHttp bool `json:"plainHttp,omitempty"`
+	NoPlainHttp bool `json:"plainHttp,omitempty"`
 
-	// Assume the registry uses plain http
+	// Assume we don't need to verify
 	// +optional
 	TLSVerify bool `json:"TLSVerify,omitempty"`
 
@@ -479,7 +509,7 @@ type OrasConfig struct {
 	// Image pull policy (e.g., Always, Never, etc.)
 	// +kubebuilder:default="IfNotPresent"
 	// +default="IfNotPresent"
-	// +omitempty
+	// +optional
 	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
 }
 
@@ -491,10 +521,14 @@ type RabbitMQ struct {
 	// certificate: "/opt/clones/certs/client_rabbitmq_certificate.pem"
 
 	// User (these can be generated secrets if needed for more production)
+	// +kubebuilder:default="dinosaur"
+	// +default="dinosaur"
 	// +optional
 	User string `json:"user,omitempty"`
 
 	// Pass (these can be generated secrets if needed for more production)
+	// +kubebuilder:default="dinosaur"
+	// +default="dinosaur"
 	// +optional
 	Pass string `json:"pass,omitempty"`
 
@@ -510,7 +544,7 @@ type RabbitMQ struct {
 
 	// container image for rabbitmq
 	// +omitempty
-	Image string `json:"container,omitempty"`
+	Image string `json:"image,omitempty"`
 
 	// Image pull policy (e.g., Always, Never, etc.)
 	// +kubebuilder:default="IfNotPresent"
@@ -523,6 +557,11 @@ type RabbitMQ struct {
 	// +default=1
 	// +optional
 	Replicas int32 `json:"replicas,omitempty"`
+}
+
+// PlainHttp exposes the expected positive variant of the variable
+func (o *OrasConfig) PlainHttp() bool {
+	return !o.NoPlainHttp
 }
 
 type RabbitMQBroker struct {
@@ -559,16 +598,14 @@ type MLServerEncoder struct {
 	// +kubebuilder:default="CG_pos_data_summary_pos_dis_C1_v1.npz"
 	// +default="CG_pos_data_summary_pos_dis_C1_v1.npz"
 	// +optional
-	Postiions string `json:"Positions,omitempty"`
+	Positions string `json:"positions,omitempty"`
 }
 
 type SamplerFeedback struct {
 
-	// Enable feedback for the sampler
-	// +kubebuilder:default=true
-	// +default=true
+	// Disable feedback for the sampler
 	// +optional
-	Enabled bool `json:"enabled,omitempty"`
+	Disabled bool `json:"enabled,omitempty"`
 
 	// The feedback database used for sampling (createsims status and validation)
 	// +kubebuilder:default="db-feedback-sampling.npz"
@@ -581,6 +618,11 @@ type SamplerFeedback struct {
 	// +default="db-feedback-fames.npz"
 	// +optional
 	FrameDatabase string `json:"frameDatabase,omitempty"`
+}
+
+// Enabled is the reverse of disabled!
+func (sf *SamplerFeedback) Enabled() bool {
+	return !sf.Disabled
 }
 
 type MLServerSampler struct {
@@ -661,9 +703,8 @@ type MLServer struct {
 	Config MLServerConfig `json:"config"`
 
 	// The Workspace for the MLServer is hard coded (does not need to change)
-	// The RabbitMQ message server
-	// +optional
-	RabbitMQ RabbitMQ `json:"rabbitMQ,omitempty"`
+	// The RabbitMQ message server defined in the top level is used by
+	// the MLServer
 
 	// The MLServer AutoEncoder
 	// Auto-encoder (ML model) parameters
@@ -692,17 +733,11 @@ type MLServer struct {
 
 type MLServerValidator struct {
 
-	// perform healing on the validated structures
-	// +kubebuilder:default=true
-	// +default=true
-	// +optional
-	Healing bool `json:"healing,omitempty"`
+	// do not perform healing on the validated structures
+	NoHealing bool `json:"noHealing,omitempty"`
 
-	// Remove all the temporary files generated during validations
-	// +kubebuilder:default=true
-	// +default=true
-	// +optional
-	Cleanup bool `json:"cleanup,omitempty"`
+	// Do not remove all the temporary files generated during validations
+	NoCleanup bool `json:"noCleanup,omitempty"`
 
 	// Name of the folder in the mummi_resources to pull out
 	// These are for Campaign 1
@@ -717,7 +752,13 @@ type MLServerValidator struct {
 	Complex string `json:"complex,omitempty"`
 }
 
-// ingress.yaml  kind-config.yaml  mlserver-deployment.yaml  rabbitmq-deployment.yaml  rbac.yaml  registry.yaml  service.yaml  test  wfmanager-deployment.yaml
+// Expose expected variables in the positive. They are set to "No" above because that is default (false)
+func (v *MLServerValidator) Healing() bool {
+	return !v.NoHealing
+}
+func (v *MLServerValidator) Cleanup() bool {
+	return !v.NoCleanup
+}
 
 // MiniMummiStatus defines the observed state of MiniMummi
 type MiniMummiStatus struct {
@@ -737,6 +778,7 @@ type MiniMummi struct {
 	Status MiniMummiStatus `json:"status,omitempty"`
 }
 
+// HasInClusterRegistry determines if we have a custom registry set
 func (m *MiniMummi) HasInClusterRegistry() bool {
 	return m.Spec.Registry.Host == ""
 }
@@ -802,21 +844,120 @@ func (m *MiniMummi) RabbitName() string {
 	return fmt.Sprintf("%s-rabbitmq", m.Name)
 }
 
+// SetRegistryDefaults ensure we have an image, port, name, etc.
+func (m *MiniMummi) SetRegistryDefaults() {
+
+	// If a custom registry is set, these variables are moot
+	if !m.HasInClusterRegistry() {
+		return
+	}
+	if m.Spec.Registry.Port == 0 {
+		m.Spec.Registry.Port = defaultRegistryPort
+	}
+	fmt.Printf("🦛 MiniMummi.Spec.Registry %s\n", m.RegistryHost())
+	if m.Spec.Registry.Name == "" {
+		m.Spec.Registry.Name = defaultRegistryName
+	}
+	if m.Spec.Registry.Replicas == 0 {
+		m.Spec.Registry.Replicas = 1
+	}
+}
+
+// SetMLServerDefaults ensures we set defaults for the ML Server
+// It seems to be a bug in kubebuilder they are not set
+func (m *MiniMummi) SetMLServerDefaults() {
+
+	// Validate MLServer Sampler
+	if m.Spec.MLServer.Sampler.Interpolator == "" {
+		m.Spec.MLServer.Sampler.Interpolator = defaultSamplerInterpolator
+	}
+	if m.Spec.MLServer.Validator.Complex == "" {
+		m.Spec.MLServer.Validator.Complex = defaultValidatorComplex
+	}
+	if m.Spec.MLServer.Validator.Resources == "" {
+		m.Spec.MLServer.Validator.Resources = defaultValidatorResources
+	}
+	if m.Spec.MLServer.Sampler.SubSampleFraction == "" {
+		m.Spec.MLServer.Sampler.SubSampleFraction = defaultSamplerSubSampleFraction
+	}
+	if m.Spec.MLServer.Config.Logging.Level == 0 {
+		m.Spec.MLServer.Config.Logging.Level = 2
+	}
+	if m.Spec.MLServer.Config.Logging.ToStdout == 0 {
+		m.Spec.MLServer.Config.Logging.ToStdout = 1
+	}
+	if m.Spec.MLServer.Encoder.Path == "" {
+		m.Spec.MLServer.Encoder.Path = fmt.Sprintf("%s/ml", m.Spec.Paths.MummiResources)
+	}
+	if m.Spec.MLServer.Encoder.Model == "" {
+		m.Spec.MLServer.Encoder.Model = defaultEncoderModel
+	}
+	if m.Spec.MLServer.Encoder.Positions == "" {
+		m.Spec.MLServer.Encoder.Positions = defaultEncoderPositions
+	}
+	if m.Spec.MLServer.Sampler.Feedback.Database == "" {
+		m.Spec.MLServer.Sampler.Feedback.Database = defaultFeedbackDatabase
+	}
+	if m.Spec.MLServer.Sampler.Feedback.FrameDatabase == "" {
+		m.Spec.MLServer.Sampler.Feedback.FrameDatabase = defaultFeedbackFrameDatabase
+	}
+	if m.Spec.MLServer.Sampler.FactorExtraStructures == 0 {
+		m.Spec.MLServer.Sampler.FactorExtraStructures = defaultSamplerFactorExtraStructures
+	}
+	if m.Spec.MLServer.Sampler.Kneighbors == 0 {
+		m.Spec.MLServer.Sampler.Kneighbors = defaultSamplerKneighbors
+	}
+	if m.Spec.MLServer.Sampler.LambdaUpperbound == 0 {
+		m.Spec.MLServer.Sampler.LambdaUpperbound = defaultSamplerLambdaUpperBound
+	}
+	if m.Spec.MLServer.Sampler.NumberIterationsMax == 0 {
+		m.Spec.MLServer.Sampler.NumberIterationsMax = defaultSamplerIterationsMax
+	}
+}
+
+// SetMLServerDefaults ensures we set defaults for the ML Server
+// It seems to be a bug in kubebuilder they are not set
+func (m *MiniMummi) SetRabbitMQDefaults() {
+	if m.Spec.RabbitMQ.Broker.Interface == "" {
+		m.Spec.RabbitMQ.Broker.Interface = defaultBrokerInterface
+	}
+	if m.Spec.RabbitMQ.Broker.Queue == "" {
+		m.Spec.RabbitMQ.Broker.Queue = defaultBrokerQueue
+	}
+}
+
+// SetWFManagerDefaults sets defaults for the workflow manager
+func (m *MiniMummi) SetWFManagerDefaults() {
+	if m.Spec.WorkflowManager.IoType == "" {
+		m.Spec.WorkflowManager.IoType = defaultSaveType
+	}
+	if m.Spec.WorkflowManager.FbType == "" {
+		m.Spec.WorkflowManager.FbType = defaultSaveType
+	}
+}
+
+// SetPathsDefaults sets the default paths
+func (m *MiniMummi) SetPathsDefaults() {
+	if m.Spec.Paths.Certs == "" {
+		m.Spec.Paths.Certs = defaultPathCerts
+	}
+	if m.Spec.Paths.MummiResources == "" {
+		m.Spec.Paths.MummiResources = defaultPathsResources
+	}
+	if m.Spec.Paths.MummiRoot == "" {
+		m.Spec.Paths.MummiRoot = defaultPathsMummiRoot
+	}
+
+	fmt.Printf("🦛 MiniMummi.Spec.Paths.MummiRoot %s\n", m.Spec.Paths.MummiRoot)
+	fmt.Printf("🦛 MiniMummi.Spec.Paths.MummiResources %s\n", m.Spec.Paths.MummiResources)
+}
+
 // Validate ensures we have data that is needed, and sets defaults if needed
 func (m *MiniMummi) Validate() bool {
 	fmt.Println()
 
-	// Show paths
-	fmt.Printf("🦛 MiniMummi.Spec.Paths.MummiRoot %s\n", m.Spec.Paths.MummiRoot)
-	fmt.Printf("🦛 MiniMummi.Spec.Paths.MummiResources %s\n", m.Spec.Paths.MummiResources)
-
-	// If we are using an in cluster registry and the port isn't set
-	if m.HasInClusterRegistry() && m.Spec.Registry.Port == 0 {
-		m.Spec.Registry.Port = 5000
-	}
-	fmt.Printf("🦛 MiniMummi.Spec.Registry %s\n", m.RegistryHost())
-
 	// Validate we've been provided containers (that are private)
+	// These can eventually be replaced with defaults
 	if m.Spec.MLServer.Image == "" {
 		fmt.Println("👉 MiniMummi.Spec.MLServer.Image is not defined")
 		return false
@@ -829,17 +970,34 @@ func (m *MiniMummi) Validate() bool {
 		fmt.Println("👉 MiniMummi.Spec.Workflow.Image is not defined")
 		return false
 	}
+	if m.Spec.Registry.Image == "" {
+		m.Spec.Registry.Image = "ghcr.io/oras-project/registry:latest"
+	}
 
-	// TODO
-	// set default oras registry stuff if external not provided (mlserver and wfmanager have oras)
-	// sampler->iterpolator can be one of "ot_feedback" # Type of sampler used. Can be "naive", "ot" or "ot_feedback"
-	// set mummi app to be same as root if not set
-	// mlserver->sampler->output defaults to     eval: mummi_ras.Naming.dir_root('ml')
-	// mlserver->generator->outpath     eval: mummi_ras.Naming.dir_root('ml')
-	// mlserver->validator->outpath     eval: mummi_ras.Naming.dir_root('ml')
-	// iotype and fbtype validate in: 'simple' / 'taridx / dbr / mummi')
-	// file logging default is -1. Should default to 1 for wfmanager, 0 for mlserver
-	// stdout logging default also -1, should default to 0 for wfmanager, 1 for mlserver
+	// Registry, MLServer Defaults
+	m.SetPathsDefaults()
+	m.SetRegistryDefaults()
+	m.SetMLServerDefaults()
+	m.SetRabbitMQDefaults()
+
+	// Validate MLServer Sampler
+	interpolator := m.Spec.MLServer.Sampler.Interpolator
+	if !slices.Contains(validSamplerInterpolator, interpolator) {
+		fmt.Printf("👉 MiniMummi.Spec.MLServer.Sampler.Interpolator '%s' is invalid. Choices are '%s'\n", interpolator, validSamplerInterpolator)
+		return false
+	}
+
+	// ioType and fbType validate to this set
+	saveType := m.Spec.WorkflowManager.IoType
+	if !slices.Contains(validSaveTypes, saveType) {
+		fmt.Printf("👉 MiniMummi.Spec.WorkflowManager.IoType '%s' is invalid. Choices are '%s'\n", saveType, validSaveTypes)
+		return false
+	}
+	saveType = m.Spec.WorkflowManager.FbType
+	if !slices.Contains(validSaveTypes, saveType) {
+		fmt.Printf("👉 MiniMummi.Spec.WorkflowManager.FbType '%s' is invalid. Choices are '%s'\n", saveType, validSaveTypes)
+		return false
+	}
 	return true
 }
 

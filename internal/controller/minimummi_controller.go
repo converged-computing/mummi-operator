@@ -83,13 +83,16 @@ func NewMiniMummiReconciler(
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=core,resources=networks,verbs=create;patch
 
-//+kubebuilder:rbac:groups="",resources="clusterroles",verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources="clusterrolebindings",verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update
+//+kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources="rolebindings",verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources="roles",verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources="rolebindings",verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources="roles",verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete;exec
 //+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;list;watch;create;update;patch;delete;exec
+//+kubebuilder:rbac:groups="",resources=jobs/status,verbs=get;list;watch;create;update;patch;delete;exec
+//+kubebuilder:rbac:groups=batch,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;exec
+//+kubebuilder:rbac:groups=batch,resources=pods,verbs=get;list;watch;create;update;patch;delete;exec
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -153,9 +156,7 @@ func (r *MiniMummiReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.StatefulSet{}).
-		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&corev1.ServiceAccount{}).
-		Owns(&rbacv1.ClusterRoleBinding{}).
 		Complete(r)
 }

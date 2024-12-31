@@ -6,7 +6,7 @@
 mummi_mlserver_nnodes=${1:-1}
 
 # Use provided container mummi_ras
-MUMMI_APP={{ if .Spec.Paths.MummiApp }}{{ .Spec.Paths.MummiApp }}{{ else }}/opt/clones/mummi-ras{{ end }}
+MUMMI_APP={{ if .Spec.Paths.MummiRoot }}{{ .Spec.Paths.MummiRoot }}{{ else }}/opt/clones/mummi-ras{{ end }}
 export MUMMI_ROOT=$MUMMI_APP
 export MUMMI_RESOURCES={{ if .Spec.Paths.MummiResources }}{{ .Spec.Paths.MummiResources }}{{ else }}/opt/clones/mummi_resources{{ end }}
 export MUMMI_APP
@@ -29,7 +29,7 @@ export OMP_NUM_THREADS=$NUM_THREADS
 
 # Rabbit mq connection stuff
 # rabbitmq.mini-mummi.default.svc.cluster.local
-WABBIT_HOST={{ .Spec.RabbitHost }}
+WABBIT_HOST={{ .Mummi.RabbitHost }}
 
 # This gets the rabbitmq script if we need it (I didn't use it yet)
 # Note that this is the insecure port, we can test changing this to 15671
@@ -47,7 +47,7 @@ echo "mummi_core:" `python -c "import mummi_core; print (mummi_core.__path__)"`
 echo "mummi_ras:"  `python -c "import mummi_ras; print (mummi_ras.__path__)"`
 
 export KERAS_BACKEND='theano'
-export OMP_NUM_THREADS={{ if .Spec.MLServer.Threads }}{{ .Spec.MLServer.Threads }}{{ else }}4{{ end }}
+export OMP_NUM_THREADS={{ if .Spec.MLServer.Config.Threads }}{{ .Spec.MLServer.Config.Threads }}{{ else }}4{{ end }}
 umask 007
 
 # Test if the packages are correctly installed in the container

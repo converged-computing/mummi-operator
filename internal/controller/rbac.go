@@ -38,7 +38,6 @@ func (r *MiniMummiReconciler) createRBAC(
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = r.createServiceAccount(ctx, spec)
-
 		}
 		return ctrl.Result{}, err
 	}
@@ -56,11 +55,10 @@ func (r *MiniMummiReconciler) createRBAC(
 
 	// Role Bindings for the role
 	binding := &rbacv1.RoleBinding{}
-	err = r.Get(ctx, types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}, binding)
+	err = r.Get(ctx, types.NamespacedName{Name: spec.RoleName(), Namespace: spec.Namespace}, binding)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = r.createRoleBinding(ctx, spec)
-
 		}
 		return ctrl.Result{}, err
 	}
@@ -78,36 +76,7 @@ func (r *MiniMummiReconciler) createServiceAccount(
 	}
 	ctrl.SetControllerReference(spec, sa, r.Scheme)
 	err := r.Create(ctx, sa)
-	if err != nil {
-		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
-	}
 	return sa, err
-}
-
-// createClusterRole creates the cluster role to give permission for wfmanager to make objects
-// TODO delete - I don't think we need any cluster roles (or at least we should not)
-func (r *MiniMummiReconciler) createClusterRole(
-	ctx context.Context,
-	spec *api.MiniMummi,
-) (*rbacv1.ClusterRole, error) {
-
-	mLog.Info("Creating cluster role for: ", spec.Name, spec.Namespace)
-	role := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: spec.ClusterRoleName(), Namespace: spec.Namespace},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods", "jobs", "configmaps", "jobs/status"},
-				Verbs:     []string{"list", "get", "patch", "create", "delete"},
-			},
-		},
-	}
-	ctrl.SetControllerReference(spec, role, r.Scheme)
-	err := r.Create(ctx, role)
-	if err != nil {
-		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
-	}
-	return role, err
 }
 
 // createRole creates permissions for the wfmanager scoped to the namespace
@@ -129,9 +98,6 @@ func (r *MiniMummiReconciler) createRole(
 	}
 	ctrl.SetControllerReference(spec, role, r.Scheme)
 	err := r.Create(ctx, role)
-	if err != nil {
-		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
-	}
 	return role, err
 }
 
@@ -158,8 +124,5 @@ func (r *MiniMummiReconciler) createRoleBinding(
 	}
 	ctrl.SetControllerReference(spec, binding, r.Scheme)
 	err := r.Create(ctx, binding)
-	if err != nil {
-		mLog.Error(err, "🔴 Create cluster role", "Name", spec.Name)
-	}
 	return binding, err
 }

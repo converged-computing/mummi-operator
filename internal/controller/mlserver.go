@@ -62,9 +62,6 @@ func (r *MiniMummiReconciler) createMLServer(
 	deployment := mlserver.NewMLServerDeployment(spec)
 	ctrl.SetControllerReference(spec, deployment, r.Scheme)
 	err := r.Create(ctx, deployment)
-	if err != nil {
-		mLog.Error(err, "🔴 Create mlserver deployment", "Name", spec.MLServerName())
-	}
 	return deployment, err
 }
 
@@ -91,8 +88,5 @@ func (r *MiniMummiReconciler) createMLServerEntrypoint(
 
 	ctrl.SetControllerReference(spec, cm, r.Scheme)
 	err = r.Create(ctx, cm)
-	if err != nil {
-		mLog.Error(err, "🔴 Create mlserver entrypoint configmap", "Name", spec.MLServerName())
-	}
 	return cm, err
 }

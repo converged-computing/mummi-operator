@@ -3,8 +3,8 @@ job_type: createsim
 {{template "job-config" .}}
 
 # container image for createsims (should be loaded into cluster)
-image: {{ if .Job.Container }}{{ .Job.Container }}{{ else }}633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:createsims{{ end }}
-namespace: {{ if .Namespace }}{{ .Namespace }}{{ else }}default{{ end }}
+image: {{ .Job.Image }}
+namespace: {{ if .Mummi.Namespace }}{{ .Mummi.Namespace }}{{ else }}default{{ end }}
 imports:
   - mummi_ras
 
@@ -36,7 +36,7 @@ script: |
   locpath=/tmp/workdir
   outpath=/tmp/out
   # registry-0.mini-mummi.default.svc.cluster.local:5000
-  registry="{{ .Spec.RegistryHost }}"
+  registry="{{ .Mummi.RegistryHost }}"
 
   echo ">> simname      = $simname"
   echo ">> outpath      = $outpath"

@@ -50,7 +50,9 @@ endif
 # This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
 OPERATOR_SDK_VERSION ?= v1.38.0
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= ghcr.io/converged-computing/mummi-operator:latest
+DEVIMG ?= ghcr.io/converged-computing/mummi-operator:test
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
 
@@ -189,6 +191,24 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+
+.PHONY: build-config
+build-config: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > examples/dist/mummi-operator.yaml
+
+# Build a test image, push to the registry at test, and apply the build-config
+.PHONY: test-deploy
+test-deploy: manifests kustomize
+	docker build --no-cache -t ${DEVIMG} .
+	docker push ${DEVIMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${DEVIMG}
+	$(KUSTOMIZE) build config/default > examples/dist/mummi-operator-dev.yaml
+
+.PHONY: test-deploy-recreate
+test-deploy-recreate: test-deploy
+	kubectl delete -f ./examples/dist/mummi-operator-dev.yaml || echo "Already deleted"
+	kubectl apply -f ./examples/dist/mummi-operator-dev.yaml
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.

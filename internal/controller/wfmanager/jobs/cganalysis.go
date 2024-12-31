@@ -21,8 +21,9 @@ func populateCganalysis(job *api.MummiJob) {
 	if job.Config.CoresPerTask == 0 {
 		job.Config.CoresPerTask = 3
 	}
-	if job.Config.NumberProcs == 0 {
-		job.Config.NumberProcs = defaultNumberProcs
+	// Number of processes, nproc
+	if job.Config.Nproc == 0 {
+		job.Config.Nproc = defaultNumberProcs
 	}
 
 	// We need to have a minimum bundle size here of 1
@@ -40,12 +41,13 @@ func TemplateCganalysis(spec *api.MiniMummi, job *api.MummiJob) (string, error) 
 	subs := JobTemplate{
 		JobName:        "cganalysis",
 		JobDescription: "CGAnalysis ({})",
-		Spec:           *spec,
-		Job:            *job,
+		Spec:           &spec.Spec,
+		Mummi:          spec,
+		Job:            job,
 	}
 
 	// Wrap the named template to identify it later
-	startTemplate := `{{define "start"}}` + createsimTemplate + "{{end}}"
+	startTemplate := `{{define "start"}}` + cganalysisTemplate + "{{end}}"
 
 	// We assemble different strings (including the components) into one!
 	template, err := combineTemplates(components, startTemplate)

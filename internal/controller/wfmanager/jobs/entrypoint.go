@@ -21,8 +21,9 @@ var components string
 type JobTemplate struct {
 	JobName        string
 	JobDescription string
-	Spec           api.MiniMummi
-	Job            api.MummiJob
+	Spec           *api.MiniMummiSpec
+	Mummi          *api.MiniMummi
+	Job            *api.MummiJob
 }
 
 // combineTemplates into one common start

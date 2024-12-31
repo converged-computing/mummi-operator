@@ -3,8 +3,8 @@ job_type: cg
 {{template "job-config" .}}
 
 # container image for createsims (should be loaded into cluster)
-image: {{ if .Job.Container }}{{ .Job.Container }}{{ else }}633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis{{ end }}
-namespace: {{ if .Namespace }}{{ .Namespace }}{{ else }}default{{ end }}
+image: {{ .Job.Image }}
+namespace: {{ if .Mummi.Namespace }}{{ .Mummi.Namespace }}{{ else }}default{{ end }}
 imports:  # possibly needed for any evals
   - mummi_ras
 

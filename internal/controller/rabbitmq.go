@@ -82,9 +82,6 @@ func (r *MiniMummiReconciler) createRabbitMQSecret(
 	}
 	ctrl.SetControllerReference(spec, secret, r.Scheme)
 	err = r.Create(ctx, secret)
-	if err != nil {
-		mLog.Error(err, "🔴 Create rabbitmq certificate secret", "Name", spec.Name)
-	}
 	return secret, err
 }
 
@@ -156,8 +153,5 @@ func (r *MiniMummiReconciler) createRabbitEntrypoint(
 
 	ctrl.SetControllerReference(spec, cm, r.Scheme)
 	err := r.Create(ctx, cm)
-	if err != nil {
-		mLog.Error(err, "🔴 Create rabbitmq entrypoint configmap", "Name", spec.RabbitName())
-	}
 	return cm, err
 }

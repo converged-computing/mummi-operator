@@ -1,0 +1,25 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: topology-study
+  region: us-east-2
+  version: "1.27"
+
+availabilityZones: ["us-east-2b", "us-east-2c"]
+managedNodeGroups:
+  - name: workers
+    availabilityZones: ["us-east-2b"]
+    instanceType: c5a.4xlarge
+    # Defaults to 80, this in GB. 80 is too small to support installing EFA
+    volumeSize: 150
+    # This will default to gp3 and you'll wait 30+ minutes and it will fail
+    volumeType: gp2
+    minSize: 6
+    maxSize: 6
+    placement:
+      groupName: performance-study
+    labels: { "flux-operator": "true" }
+    ssh:
+      allow: true
+      publicKeyPath: ~/.ssh/id_eks.pub

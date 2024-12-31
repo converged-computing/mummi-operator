@@ -13,7 +13,7 @@ wfmanager:
 
     # E.g., oras push <host>/<uri>:<sample> --plain-http .
     oras:
-      host: {{ .Spec.RegistryHost }}
+      host: {{ .Mummi.RegistryHost }}
       plain_http: {{ if .Spec.Registry.PlainHttp }}true{{ else }}false{{ end }}
 
     # scheduler to use (kubernetes or flux)

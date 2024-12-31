@@ -7,33 +7,22 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - clusterrolebindings
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - clusterroles
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - events
   verbs:
   - create
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - jobs/status
+  verbs:
+  - create
+  - delete
+  - exec
+  - get
+  - list
+  - patch
   - update
   - watch
 - apiGroups:
@@ -87,6 +76,19 @@ rules:
 - apiGroups:
   - batch
   resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - exec
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
   - jobs
   verbs:
   - create
@@ -101,6 +103,19 @@ rules:
   - batch
   resources:
   - jobs/status
+  verbs:
+  - create
+  - delete
+  - exec
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - pods
   verbs:
   - create
   - delete
@@ -310,6 +325,30 @@ rules:
   - networking.k8s.io
   resources:
   - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
   verbs:
   - create
   - delete

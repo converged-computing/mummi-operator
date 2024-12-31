@@ -35,12 +35,11 @@ func (r *MiniMummiReconciler) createRegistry(
 
 	// Check for existing registry stateful set
 	existing := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}, existing)
+	err := r.Get(ctx, types.NamespacedName{Name: spec.Spec.Registry.Name, Namespace: spec.Namespace}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = r.createStatefulSet(ctx, spec)
 		}
-		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, err
 }
@@ -95,8 +94,5 @@ func (r *MiniMummiReconciler) createStatefulSet(
 	}
 	ctrl.SetControllerReference(spec, statefulSet, r.Scheme)
 	err := r.Create(ctx, statefulSet)
-	if err != nil {
-		mLog.Error(err, "🔴 Create registry statefulset", "Name", spec.Spec.Registry.Name)
-	}
 	return statefulSet, err
 }

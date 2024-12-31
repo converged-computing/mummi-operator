@@ -56,8 +56,5 @@ func (r *MiniMummiReconciler) createHeadlessService(
 	}
 	ctrl.SetControllerReference(spec, service, r.Scheme)
 	err := r.Create(ctx, service)
-	if err != nil {
-		mLog.Error(err, "🔴 Create service", "Service", service.Name)
-	}
 	return service, err
 }

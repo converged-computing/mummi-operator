@@ -15,13 +15,24 @@ The Mummi Operator is intended to run MiniMummi.
 
 ### 1. Create Cluster
 
+You can create a cluster locally (if your computer is chonky and can handle it) or use AWS. Here is locally:
+
 ```bash
 kind create cluster --config ./examples/kind-config.yaml
 ```
 
+And for AWS (recommended for most cases):
+
+```bash
+eksctl create cluster --config-file examples/eks-config-6.yaml
+aws eks update-kubeconfig --region us-east-2 --name topology-study
+```
+
 ## 2. Load Images
 
-Note that we are going to load the images to make our lives easier (otherwise we need to include them with pull secrets). You might need to login and pull these first:
+> Kind Only
+
+If you are using kind, you will want to load your images. If you are using AWS (and on our account with the registry) then you'll be able to pull them to the cluster. Note that we are going to load the images to make our lives easier (otherwise we need to include them with pull secrets). You might need to login and pull these first:
 
 ```bash
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 633731392008.dkr.ecr.us-east-1.amazonaws.com
@@ -42,7 +53,25 @@ kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:c
 kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis
 ```
 
-Next: wfmanager, mlserver
+## 3. Install the Operator
+
+The operator is built via its manifest in dist. For development:
+
+```bash
+make test-deploy-recreate
+```
+
+For non-development
+
+```bash
+kubectl apply -f examples/dist/mummi-operator.yaml
+```
+
+## 4. Deploy an Example Mini Mummi
+
+```bash
+kubectl apply -f examples/test-aws/mummi.yaml 
+```
 
 ## Design
 
@@ -68,13 +97,14 @@ These are some design decisions I've made:
 
 ### Questions
 
+- Logging: I think we might want to double check if it's doing anything. I've changed levels and I don't see much difference.
 - What is the difference between `MUMMI_ROOT` and `MUMMI_APP`? The second makes sense (e.g., /opt/clones/mummi-ras) but the first is always set to the second. I'd expect it be something like /opt/clones where there are more assets.
 - Should `OMP_NUM_THREADS` in the job entrypoints coincide with cores_per_task in the config?
 - The wfmanager has a currently empty environment variable section. What is that for?
 - What does wfmanager->is_gc mean? Is garbage collecting?
 - What do each of the following mean (I am guessing th == threshold? I want to have descriptive variables)
   - fbaa_hvr_th
-  -	fbaa_crd_th        
+  -	fbaa_crd_th
   - fbaa_frame_increment 
 - I'm still not sure about purpose (and need for) `/opt/clones/mummi-ras/macro/simlist.spec`. It seems like I shouldn't need it? I haven't fully tested without it, I know there is minimally a warning without it. What is it?
 

@@ -62,9 +62,6 @@ func (r *MiniMummiReconciler) createWFManager(
 	deployment := wfmanager.NewWorkflowManagerDeployment(spec)
 	ctrl.SetControllerReference(spec, deployment, r.Scheme)
 	err := r.Create(ctx, deployment)
-	if err != nil {
-		mLog.Error(err, "🔴 Create workflow manager deployment", "Name", spec.WFManagerName())
-	}
 	return deployment, err
 }
 
@@ -87,7 +84,7 @@ func (r *MiniMummiReconciler) createWFManagerEntrypoint(
 	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.MLServerName(),
+			Name:      spec.WFManagerName(),
 			Namespace: spec.Namespace,
 		},
 		Data: data,
@@ -95,8 +92,5 @@ func (r *MiniMummiReconciler) createWFManagerEntrypoint(
 
 	ctrl.SetControllerReference(spec, cm, r.Scheme)
 	err = r.Create(ctx, cm)
-	if err != nil {
-		mLog.Error(err, "🔴 Create mlserver entrypoint configmap", "Name", spec.MLServerName())
-	}
 	return cm, err
 }

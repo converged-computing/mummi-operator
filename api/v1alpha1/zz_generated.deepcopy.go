@@ -58,7 +58,6 @@ func (in *Logging) DeepCopy() *Logging {
 func (in *MLServer) DeepCopyInto(out *MLServer) {
 	*out = *in
 	out.Config = in.Config
-	out.RabbitMQ = in.RabbitMQ
 	out.Encoder = in.Encoder
 	out.Sampler = in.Sampler
 	out.Validator = in.Validator

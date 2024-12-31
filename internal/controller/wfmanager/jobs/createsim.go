@@ -17,8 +17,9 @@ func populateCreateSim(job *api.MummiJob) {
 	if job.Config.CoresPerTask == 0 {
 		job.Config.CoresPerTask = 6
 	}
-	if job.Config.NumberProcs == 0 {
-		job.Config.NumberProcs = defaultNumberProcs
+	// Number of processes, nproc
+	if job.Config.Nproc == 0 {
+		job.Config.Nproc = defaultNumberProcs
 	}
 
 	// Createsim default wall time (also in the template, but this is backup)
@@ -36,8 +37,9 @@ func TemplateCreateSim(spec *api.MiniMummi, job *api.MummiJob) (string, error) {
 	subs := JobTemplate{
 		JobName:        "createsim",
 		JobDescription: "CreateSim ({})",
-		Spec:           *spec,
-		Job:            *job,
+		Spec:           &spec.Spec,
+		Mummi:          spec,
+		Job:            job,
 	}
 
 	// Wrap the named template to identify it later

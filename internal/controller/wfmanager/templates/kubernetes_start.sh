@@ -27,7 +27,7 @@ fi
 export PYTHONPATH=$PYTHONPATH:/opt
 
 # Use provided container mummi_ras
-MUMMI_APP={{ if .Spec.Paths.MummiApp }}{{ .Spec.Paths.MummiApp }}{{ else }}/opt/clones/mummi-ras{{ end }}
+MUMMI_APP={{ if .Spec.Paths.MummiRoot }}{{ .Spec.Paths.MummiRoot }}{{ else }}/opt/clones/mummi-ras{{ end }}
 export MUMMI_ROOT=$MUMMI_APP
 export MUMMI_RESOURCES={{ if .Spec.Paths.MummiResources }}{{ .Spec.Paths.MummiResources }}{{ else }}/opt/clones/mummi_resources{{ end }}
 export MUMMI_APP
@@ -72,7 +72,7 @@ echo "(`hostname`: `date`) --> Launching workflow"
 # This gets the rabbitmq script if we need it (I didn't use it yet)
 # We could change to https and use port 15671 here instead
 # curl http://rabbitmq.mini-mummi.default.svc.cluster.local:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin  
-curl http://{{ .Spec.RabbitHost }}:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin
+curl http://{{ .Mummi.RabbitHost }}:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin
 chmod +x /usr/local/bin/rabbitmqadmin  
 
 # Create dummy credentials

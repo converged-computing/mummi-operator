@@ -10,7 +10,8 @@ import (
 // TemplateSubs are currently just the spec
 // This is consistent across all deployments, etc.
 type TemplateSubs struct {
-	Spec *api.MiniMummi
+	Spec  *api.MiniMummiSpec
+	Mummi *api.MiniMummi
 }
 
 // PopulateTemplate is a generic template to provide the spec to populate a template
@@ -25,8 +26,8 @@ func PopulateTemplate(spec *api.MiniMummi, templateString string) (string, error
 	// We can write into a bytes buffer (and return as string)
 	var out bytes.Buffer
 
-	// Data for the template
-	subs := TemplateSubs{Spec: spec}
+	// Data for the template (redundant, but provided for convenience)
+	subs := TemplateSubs{Spec: &spec.Spec, Mummi: spec}
 
 	// Execute the template and write output to stdout
 	err = tmpl.Execute(&out, subs)
