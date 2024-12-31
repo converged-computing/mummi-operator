@@ -435,10 +435,11 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
                     LOGGER.warning(f"Job name {job_name} is not found, continuing.")
                 elif e.reason == "Conflict":
                     print('There is a conflict, line 422 kubernetesTracker.py')
-                    import IPython
-                    IPython.embed()
+                    raise e
+                # E.g., forbidden would be an issue with rbac
                 else:
-                    continue
+                    print("Unexpected error:")
+                    raise e
 
                 # Not sure if this is the best action to take
                 LOGGER.error(e)
@@ -514,8 +515,6 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
                 submit_status = SubmissionCode.OK            
             else:             
                 LOGGER.info("There was a create job error: {e.reason}")
-                import IPython
-                IPython.embed()
                 submit_status = SubmissionCode.ERROR
 
         return SubmissionRecord(submit_status, retcode, jobid)
@@ -623,7 +622,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
                 LOGGER.warning(f"Unknown jobid {jobid} to cancel, skipping")
                 continue
             try:
-                response = batch_api.delete_namespaced_job(
+                batch_api.delete_namespaced_job(
                     name=job_name, namespace=self.namespace
                 )
             except Exception as e:
@@ -632,7 +631,8 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             # Delete the associated config map
             self.delete_configmap(job_name)
 
-        return CancellationRecord(cancel_code, cancel_rcode)
+        return CancelCode.OK
+        # return CancellationRecord(cancel_code, cancel_rcode)
 
     def _state(self, flux_state):
         raise NotImplementedError(
@@ -775,15 +775,15 @@ class KubernetesTracker(JobTracker):
         sims_unknown = []
         sims_stop = []
 
-        for i in range(len(sim_names)):
+        for i, sim_name in enumerate(sim_names):
             if sim_statuses[i] == SimulationStatus.Success:
-                sims_success.append(sim_names[i])
+                sims_success.append(sim_name)
             elif sim_statuses[i] == SimulationStatus.Failed:
-                sims_failed.append(sim_names[i])
+                sims_failed.append(sim_name)
             elif sim_statuses[i] == SimulationStatus.Stop:
-                sims_stop.append(sim_names[i])
+                sims_stop.append(sim_name)
             else:
-                sims_unknown.append(sim_names[i])
+                sims_unknown.append(sim_name)
 
         LOGGER.debug(
             f"sims_success = {sims_success}, sims_failed = {sims_failed}, sims_unknown = {sims_unknown} and sims_stop = {sims_stop}"
@@ -1112,12 +1112,12 @@ class KubernetesTracker(JobTracker):
 
         LOGGER.info(self.__str__())
 
-        sims_success = []  # simulations that have finished successfully
-        sims_failed = []  # simulations that have failed
-        sims_continue = []  # simulations that need to be continued
-        sims_stop = []  # Sims that have to stop (not interesting anymore)
+        sims_success = []     # simulations that have finished successfully
+        sims_failed = []      # simulations that have failed
+        sims_continue = []    # simulations that need to be continued
+        sims_stop = []        # Sims that have to stop (not interesting anymore)
         jobs_2_continue = []  # jobs that are still running
-        jobs_2_reclaim = []  # jobs that either finished or failed
+        jobs_2_reclaim = []   # jobs that either finished or failed
         jobs_2_cancel = []
 
         # Initialize termination status set.

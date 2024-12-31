@@ -94,6 +94,7 @@ These are some design decisions I've made:
 - jobs:
  - if these are volume mounts into the wfmanager container, they should be moved
 - mlserver model should eventually be customizable (currently built into container)
+- rabbitmq and wfmanager: My certificate generation is off - I am missing the p12 files (need to be generated in go). It generates handshake error. Disabled for now but needs to be reenabled by adding the cert file back.
 
 ### Questions
 
@@ -107,6 +108,35 @@ These are some design decisions I've made:
   -	fbaa_crd_th
   - fbaa_frame_increment 
 - I'm still not sure about purpose (and need for) `/opt/clones/mummi-ras/macro/simlist.spec`. It seems like I shouldn't need it? I haven't fully tested without it, I know there is minimally a warning without it. What is it?
+
+## Debugging
+
+### RabbitMQ
+
+You can shell into the rabbitmq pod to test the connection:
+
+```console
+root@rabbitmq:/# openssl s_client -connect rabbitmq.mummi-sample.default.svc.cluster.local:5671 -servername rabbitmq.mummi-sample.default.svc.cluster.local
+Connecting to 10.244.0.7
+CONNECTED(00000003)
+write:errno=104
+---
+no peer certificate available
+---
+No client certificate CA names sent
+---
+SSL handshake has read 0 bytes and written 355 bytes
+Verification: OK
+---
+New, (NONE), Cipher is (NONE)
+This TLS version forbids renegotiation.
+Compression: NONE
+Expansion: NONE
+No ALPN negotiated
+Early data was not sent
+Verify return code: 0 (ok)
+---
+```
 
 ## License
 

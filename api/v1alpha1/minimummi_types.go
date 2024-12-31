@@ -213,9 +213,7 @@ type WorkflowManager struct {
 	// +optional
 	DoPatchCreation bool `json:"doPatchCreation"`
 
-	// Should we do patch selection? (defaults to true)
-	// +kubebuilder:default=true
-	// +default=true
+	// Should we do patch selection
 	// +optional
 	DoPatchSelection bool `json:"doPatchSelection"`
 
@@ -933,6 +931,10 @@ func (m *MiniMummi) SetWFManagerDefaults() {
 	}
 	if m.Spec.WorkflowManager.FbType == "" {
 		m.Spec.WorkflowManager.FbType = defaultSaveType
+	}
+	// Must be between 1 and 5
+	if m.Spec.WorkflowManager.Logging.Level <= 0 {
+		m.Spec.WorkflowManager.Logging.Level = 2
 	}
 }
 

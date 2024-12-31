@@ -19,11 +19,9 @@ func NewWorkflowManagerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 	mLog.Info("Creating workflow manager deployment for: ", spec.WFManagerName(), spec.Namespace)
 
 	// Prepare pull policy and selector. Use "Never" for pre-loaded image
+	// Note that interactive mode is added in entrypoint after staging
 	pullPolicy := corev1.PullPolicy(spec.Spec.WorkflowManager.ImagePullPolicy)
 	command := []string{"/bin/bash", "/mummi_operator/entrypoint.sh"}
-	if spec.Spec.WorkflowManager.Interactive {
-		command = []string{"sleep", "infinity"}
-	}
 	selector := spec.Selector()
 
 	// Environment needs to have the rabbit username and password
@@ -77,10 +75,11 @@ func NewWorkflowManagerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: spec.RabbitSecretName(),
 					Items: []corev1.KeyToPath{
-						{
-							Key:  "client_rabbitmq_certificate.pem",
-							Path: "client_rabbitmq_certificate.pem",
-						},
+						// TODO: add this back when generated correctly
+						//{
+						//	Key:  "client_rabbitmq_certificate.pem",
+						//	Path: "client_rabbitmq_certificate.pem",
+						//},
 						{
 							Key:  "rabbitmq-credentials.json",
 							Path: "rabbitmq-credentials.json",
@@ -110,10 +109,12 @@ func NewWorkflowManagerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 					Labels: selector,
 				},
 				Spec: corev1.PodSpec{
-					Subdomain:  spec.Name,
-					Hostname:   "wfmanager",
-					Containers: []corev1.Container{container},
-					Volumes:    volumes,
+					// The service account allows the pod to interact with the API
+					ServiceAccountName: spec.Name,
+					Subdomain:          spec.Name,
+					Hostname:           "wfmanager",
+					Containers:         []corev1.Container{container},
+					Volumes:            volumes,
 				},
 			},
 		},
