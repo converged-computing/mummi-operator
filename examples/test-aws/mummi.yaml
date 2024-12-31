@@ -6,6 +6,7 @@ spec:
   # registry we can use in-cluster defaults
   mlserver:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlserver
+    # interactive: true
 
   rabbitmq:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:rabbitmq

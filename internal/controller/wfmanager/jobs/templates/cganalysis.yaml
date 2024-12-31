@@ -57,11 +57,6 @@ script: |
   # if we found some XTC then we take the most recent
   cframe=0
   echo ">> xtclast = $xtclast, cframe = $cframe"
-
-  # from mummi_ras.online.cg.cganalysis import main
-
-  # Previous command with Tom's autobind
-  # $(LAUNCHER) sh -c "autobind-12 mummi_cganalysis  -c  -d 2  --simname $simname  --path $locpath  --pathremote $outpath  --siminputs $outpath  --fstype mummi  --fbio mummi  --simbin ddcMD_GPU --minsimtime 10000000 --maxsimtime 25000000  --frameProcessBatchSize 5  --fcount $cframe  --nprocs 3 >> $outfile 2>&1"
   time pixi run --manifest-path /pixi-env/pixi.toml mummi_cganalysis \
                       --simname $simname \
                       --path $locpath/tmp/out \

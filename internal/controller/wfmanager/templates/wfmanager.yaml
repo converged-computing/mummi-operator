@@ -120,7 +120,7 @@ wfmanager:
     log_mem_usage: {{ .Spec.WorkflowManager.Logging.MemoryUsage }}
 
     # When stable, change to 2 (debug is 1)
-    loglevel:   {{ .Spec.WorkflowManager.Logging.Level }}
+    loglevel:   {{ if lt .Spec.WorkflowManager.Logging.Level 1 }}2{{ else }}{{ .Spec.WorkflowManager.Logging.Level }}{{ end }}
     logpath:    '{{ if .Spec.WorkflowManager.Logging.Path }}{{ .Spec.WorkflowManager.Logging.Path }}{{ end }}'      # empty logpath will use SPLASH_ROOT/workspace
 
     # Logfile defaults to 1, logstdout to 0

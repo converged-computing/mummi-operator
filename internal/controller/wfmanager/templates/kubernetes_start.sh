@@ -11,6 +11,9 @@ mummi_nnodes=${1:-1}
 # hard coded to match mlserver only running on one node
 export MUMMI_MLSERVER_NNODES=1
 
+# The user needs to be mummiusr and not root to get the right queue name
+export USER=mummiusr
+
 # This needs to minimally be the number of jobs.. or you get a negative number (and error)
 # IMPORTANT - in Kubernetes we don't need to control nodes like this - we can autoscale.
 # This should be changed
@@ -79,12 +82,12 @@ chmod +x /usr/local/bin/rabbitmqadmin
 mkdir -p $MUMMI_ROOT/mlserver
 
 # QUESTION LOIC: Should this list come from somewhere?
-mkdir -p /opt/clones/mummi-ras/macro
-cat <<EOF > /opt/clones/mummi-ras/macro/simlist.spec
-mu18-2ras2raf0ras4A0raf4A-i7.tar,run30.cfg,2
-mu18-2ras2raf0ras4A0raf4A-i8.tar,run30.cfg,2
-mu18-2ras2raf0ras4A0raf4A-i9.tar,run30.cfg,2
-EOF
+# mkdir -p /opt/clones/mummi-ras/macro
+# cat <<EOF > /opt/clones/mummi-ras/macro/simlist.spec
+# mu18-2ras2raf0ras4A0raf4A-i7.tar,run30.cfg,2
+# mu18-2ras2raf0ras4A0raf4A-i8.tar,run30.cfg,2
+# mu18-2ras2raf0ras4A0raf4A-i9.tar,run30.cfg,2
+# EOF
 
 # Tidbits from the setup_env.sh script
 

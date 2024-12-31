@@ -19,11 +19,9 @@ func NewMLServerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 	mLog.Info("Creating mlserver deployment for: ", spec.MLServerName(), spec.Namespace)
 
 	// Prepare pull policy and selector. Use "Never" for pre-loaded image
+	// Note that interactive mode is added in entrypoint after staging
 	pullPolicy := corev1.PullPolicy(spec.Spec.MLServer.ImagePullPolicy)
 	command := []string{"/bin/bash", "/mummi_operator/entrypoint.sh"}
-	if spec.Spec.MLServer.Interactive {
-		command = []string{"sleep", "infinity"}
-	}
 	selector := spec.Selector()
 
 	// Environment needs to have the rabbit username and password
@@ -77,10 +75,12 @@ func NewMLServerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: spec.RabbitSecretName(),
 					Items: []corev1.KeyToPath{
-						{
-							Key:  "client_rabbitmq_certificate.pem",
-							Path: "client_rabbitmq_certificate.pem",
-						},
+						// IMPORTANT: this needs to be re-enabled, it was giving a handshake error (likely an issue
+						// with the generation) and I didn't feel like debugging, so running with TLS mode for now)
+						//{
+						//	Key:  "client_rabbitmq_certificate.pem",
+						//	Path: "client_rabbitmq_certificate.pem",
+						//},
 						{
 							Key:  "rabbitmq-credentials.json",
 							Path: "rabbitmq-credentials.json",
