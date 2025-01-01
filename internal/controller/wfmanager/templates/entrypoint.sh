@@ -15,6 +15,11 @@ cp /mummi_operator/wfmanager.yaml {{ .Spec.Paths.MummiRoot }}/specs/kubernetes-m
 cp /mummi_operator/jobs_cg.yaml {{ .Spec.Paths.MummiRoot }}/specs/kubernetes-mini/jobs_cg.yaml
 cp /mummi_operator/jobs_createsim.yaml {{ .Spec.Paths.MummiRoot }}/specs/kubernetes-mini/jobs_createsim.yaml
 
+# Give rabbitmq time to boot up if both containers are present
+# TODO improve this so we don't need it.
+echo "Sleeping 20 seconds anticipating rabbitmq coming up..."
+sleep 20
+
 # Trigger interactive mode here so we have files staged above
 {{ if .Spec.WorkflowManager.Interactive }}sleep infinity{{ end }}
 pixi run /bin/bash /mummi_operator/kubernetes_start.sh

@@ -25,7 +25,7 @@ And for AWS (recommended for most cases):
 
 ```bash
 eksctl create cluster --config-file examples/eks-config-6.yaml
-aws eks update-kubeconfig --region us-east-2 --name topology-study
+aws eks update-kubeconfig --region us-east-2 --name mini-mummi
 ```
 
 ## 2. Load Images
@@ -73,41 +73,74 @@ kubectl apply -f examples/dist/mummi-operator.yaml
 kubectl apply -f examples/test-aws/mummi.yaml 
 ```
 
+If you want to delete the deployment, and note that jobs are not tied to the Mummi Operator (intentionally) so you can delete them separately:
+
+```bash
+kubectl delete -f examples/test-aws/mummi.yaml 
+kubectl delete jobs --all
+```
+
+That is done so if the workflow manager or mlserver (or another component) needs to be nuked, we won't lose running jobs.
+
+## 5. Cleanup
+
+```bash
+eksctl delete cluster --config-file examples/eks-config-6.yaml --wait
+```
+
+
 ## Design
 
-These are some design decisions I've made:
+These are some design decisions I've made (of course open to discussion):
 
+ - state is derived from Kubernetes, and not relying on some filesystem state
  - internal: all of the controller logic, etc. should be internal
+ - I'm trying to add kubernetes functionality in a way that doesn't disturb (change) core mummi. E.g., entrypoints and environment variables.
+ - If/when the operator is deleted, jobs (createsim and cganalysis) are not. I think this might make sense if the orchestration needs update without destroying the jobs.
+   - But discussion is needed, because if the registry is part of the mini mummi setup it will be deleted to. 
+   - But the job state can be re-discovered by a newly deployed operator
  - variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
  - instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
 
 ### TODO
 
+- We likely want to test with a real registry OR allow a volume bind (existing data) to the registry.
+  - Otherwise, artifacts deleted on cleanup. We could also have an option that allows keeping the ephemeral registry.
+- Find source of warning `Unidentified hostname: wfmanager.mummi-sample.default.svc.cluster.local` in mummi-core
+- Sometimes the wfmanager (starting too quickly after rabbitmq) fails to start, and I added a sleep to fix. A more robust solution is ideal.
 - Verify MLServer needs exactly one node, add affinity, what about wfmanager?
-- oras:
-  - should be setup to handle with https / ssl
-  - allow for customize of port
-  - allow for using external artifact registry
-- wfmanager
- - ensure we export envars 
- - when mummi python cloneable, can install (clone) on demand
-- jobs:
- - if these are volume mounts into the wfmanager container, they should be moved
+- testing is needed for:
+  - oras with external artifact registry
+  - running jobs with GPU (need to discuss budget)
+- wfmanager: when mummi python cloneable, can install (clone) on demand
 - mlserver model should eventually be customizable (currently built into container)
 - rabbitmq and wfmanager: My certificate generation is off - I am missing the p12 files (need to be generated in go). It generates handshake error. Disabled for now but needs to be reenabled by adding the cert file back.
 
 ### Questions
 
-- Logging: I think we might want to double check if it's doing anything. I've changed levels and I don't see much difference.
-- What is the difference between `MUMMI_ROOT` and `MUMMI_APP`? The second makes sense (e.g., /opt/clones/mummi-ras) but the first is always set to the second. I'd expect it be something like /opt/clones where there are more assets.
-- Should `OMP_NUM_THREADS` in the job entrypoints coincide with cores_per_task in the config?
-- The wfmanager has a currently empty environment variable section. What is that for?
+- Is mummi_core imported to init some state or can we remove it?
+- Where is job tracker write_history written? If to the filesystem, doesn't make sense to keep (maybe should delete). What is goal?
 - What does wfmanager->is_gc mean? Is garbage collecting?
+- The wfmanager has a currently empty environment variable section. What is that for?
+- I'm still not sure about purpose (and need for) `/opt/clones/mummi-ras/macro/simlist.spec`. It seems like I shouldn't need it? I haven't fully tested without it, I know there is minimally a warning without it. What is it?
 - What do each of the following mean (I am guessing th == threshold? I want to have descriptive variables)
   - fbaa_hvr_th
   -	fbaa_crd_th
   - fbaa_frame_increment 
-- I'm still not sure about purpose (and need for) `/opt/clones/mummi-ras/macro/simlist.spec`. It seems like I shouldn't need it? I haven't fully tested without it, I know there is minimally a warning without it. What is it?
+- What is the difference between `MUMMI_ROOT` and `MUMMI_APP`? The second makes sense (e.g., /opt/clones/mummi-ras) but the first is always set to the second. I'd expect it be something like /opt/clones where there are more assets.
+  - Note that I am just taking in MUMMI_ROOT as a parameter and setting the app to that
+- There is some state of "the job ended but the simuation needs to continue" that I want to avoid for this design. Can we assume a job can be given a long enough timelimit? If not, can we have a special exit code to indicate needs to continue? Or another marker?
+  - How would restart happen in an ephemeral job? See kubernetesJobTracker.py when job created - there is restart path I think we can nix.
+- Can we have some capture of "no change" for an iteration, and not increase the iteration count until there is?
+- Why is the ML server not more tightly controlled as individual jobs?
+  - There is a disconnect betweeen using the rabbit data to kick off work vs. always running the ML server first.
+- I don't understand the "jobs to reclaim" use case - if a job times out, it will just fail and we can move on. What is reclaim for? And why/when cancel with timeout?
+- I noticed jobs that seem frozen (after ~4 hours) is that expected? The walltime (duration of the job) will eventually fail them (note, we should set what we think are reasonable timeouts)
+- Should we put a limit on what the ML server is outputting? I can limit the number that the wfmanager receives, but the MLServer keeps going. This can be problematic if it ovrwhelms the registry.
+- What is the affinity of each createsim, etc? (this will help to set an upper limit for what is running)
+- Should `OMP_NUM_THREADS` in the job entrypoints coincide with cores_per_task in the config?
+- Under what conditions do we cancel / cleanup jobs?
+- When should I do a PR to upstream mummi-ras? When everything working as we want?
 
 ## Debugging
 

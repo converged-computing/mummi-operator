@@ -1222,7 +1222,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: ghcr.io/converged-computing/mummi-operator:test
+        image: ghcr.io/converged-computing/mummi-operator:latest
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

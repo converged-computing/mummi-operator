@@ -63,6 +63,15 @@ spec:
                             description: GPUs per job
                             format: int32
                             type: integer
+                          maxActive:
+                            description: |-
+                              Max active jobs (running and in queue)
+                              This should be set by the individual job, only if relevant.
+                              E.g., we might control the max number of createsim, anticipating
+                              each will trigger a cganalysis. Leave unset to allow up to max
+                              cluster size.
+                            format: int32
+                            type: integer
                           nested:
                             description: If this job is nested (run inside batch ob)
                             type: boolean
@@ -105,6 +114,15 @@ spec:
                             type: integer
                           gpus:
                             description: GPUs per job
+                            format: int32
+                            type: integer
+                          maxActive:
+                            description: |-
+                              Max active jobs (running and in queue)
+                              This should be set by the individual job, only if relevant.
+                              E.g., we might control the max number of createsim, anticipating
+                              each will trigger a cganalysis. Leave unset to allow up to max
+                              cluster size.
                             format: int32
                             type: integer
                           nested:
@@ -150,8 +168,7 @@ spec:
                     description: Should we do patch creation? (defaults to false)
                     type: boolean
                   doPatchSelection:
-                    default: true
-                    description: Should we do patch selection? (defaults to true)
+                    description: Should we do patch selection
                     type: boolean
                   doScheduleJobs:
                     default: true
@@ -231,6 +248,12 @@ spec:
                         description: Log to stdout (defaults to true)
                         type: integer
                     type: object
+                  maxNodes:
+                    description: |-
+                      Maximum nodes to allow cluster to scale to (that jobs add up to)
+                      If unset, will default to Nodes above (N=6)
+                    format: int32
+                    type: integer
                   mlserverRoundId:
                     description: The round ID that will serve to create ml/iter{mlserver_round_id}/
                       to store ML generated patches
