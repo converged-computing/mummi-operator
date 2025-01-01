@@ -1,6 +1,6 @@
 job_type: createsim
 
-{{template "job-config" .}}
+{{ template "job-config" . }}
 
 # container image for createsims (should be loaded into cluster)
 image: {{ .Job.Image }}
@@ -49,11 +49,10 @@ script: |
   # when it exists it checks for files within, don't want to do that
   mkdir -p -v $locpath; cd $locpath
 
-  # Stage data from OCI registry (this has the set name, service, and namespace hard coded, ok for now)
-  echo "Looking for $simname with oras repo list"
-  oras repo list $registry --plain-http | grep $simname
-  echo "Pulling oras artifact to $locpath"
-  oras pull $registry/$simname:latest --plain-http
+  # This is pushed by the MLServer
+  tag=latest
+  uri=$registry/$simname:$tag
+  {{ template "oras-pull" . }}
 
   #  --mpi "autobind-24 gmx mdrun" \
   #  --mdrunopt " -rdd 2.0 -ntomp 4 -dd 4 3 2 -nt 96" \
@@ -72,7 +71,6 @@ script: |
     --mini \
     --mdrunopt " -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" 2>&1 | tee $outfile
 
-  # TODO: eventually make this secure, etc.
   retval=$?
   if [ $retval -eq 0 ] && [ -f /tmp/out/createsims.tar.gz ]; 
     then
@@ -80,7 +78,7 @@ script: |
       cd $outpath
       tar czf createsims-output.tar.gz /tmp/out
       echo "Simulation was successful, pushing result to $registry/$simname:createsim"
-      oras push --plain-http --insecure $registry/$simname:createsim createsims-output.tar.gz
+      oras push {{ if .Spec.Registry.PlainHttp }}--plain-http{{ end }} {{ if .Spec.Registry.TLSVerify }}{{ else }}--insecure{{ end }} $registry/$simname:createsim createsims-output.tar.gz
   fi    
   ls $outpath
   wait

@@ -20,8 +20,8 @@ config:
 
   # This is hard coded for now, since this operator only supports mini mummi and oras
   mini_mummi: true    # Run with mini MuMMI settings
-  flux: false            # disable flux
-  use_oras: true         # push valid artifacts to an oras registry
+  flux:       false    # disable flux
+  use_oras:   true     # push valid artifacts to an oras registry
 
 # E.g., oras push <host>/<uri>:<sample> --plain-http .
 oras:

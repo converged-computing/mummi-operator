@@ -14,8 +14,8 @@ spec:
   # Defaults to 6 mummi nnodes, interactive mode is for debugging
   manager:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:wfmanager
-    interactive: true
-
+    numberMaxSelectedPatchBuffer: 5
+    
   # Jobs for the Mummi workflow manager to submit / orchestrate
   # Right now we use defaults for most things (bundle size, nodes, etc)
   jobs:

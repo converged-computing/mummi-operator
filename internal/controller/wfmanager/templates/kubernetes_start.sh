@@ -16,9 +16,13 @@ export USER=mummiusr
 
 # This needs to minimally be the number of jobs.. or you get a negative number (and error)
 # IMPORTANT - in Kubernetes we don't need to control nodes like this - we can autoscale.
-# This should be changed
 export MUMMI_NNODES={{ if .Spec.WorkflowManager.Nodes }}{{ .Spec.WorkflowManager.Nodes }}{{ else }}6{{ end }}
 export NCORES_PER_NODE={{ if .Spec.WorkflowManager.CoresPerNode }}{{ .Spec.WorkflowManager.CoresPerNode }}{{ else }}4{{ end }}
+
+# Since the above is likely used for other purposes, we have a new varible defined
+# for what we allow the cluster jobs to scale to. E.g., how man jobs can stack
+# up in the Kubernetes queue.
+export KUBERNETES_MAX_NODES={{ if .Spec.WorkflowManager.MaxNodes }}{{ .Spec.WorkflowManager.MaxNodes }}{{ else }}${MUMMI_NNODES}{{ end }}
 
 # This adds our custom kubernetesTracker.py to the path
 echo "Looking for kubernetesTracker.py"

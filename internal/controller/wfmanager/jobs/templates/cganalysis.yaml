@@ -1,6 +1,6 @@
 job_type: cg
 
-{{template "job-config" .}}
+{{ template "job-config" . }}
 
 # container image for createsims (should be loaded into cluster)
 image: {{ .Job.Image }}
@@ -30,7 +30,10 @@ script: |
   simname={simname}
   locpath=/tmp/workdir
   outpath=/tmp/out
-  registry="registry-0.mini-mummi.default.svc.cluster.local:5000"
+  outfile={outfile}
+
+  # registry="registry-0.mini-mummi.default.svc.cluster.local:5000"
+  registry="{{ .Mummi.RegistryHost }}"
 
   echo ">> simname  = $simname"
   echo ">> outpath  = $outpath"
@@ -44,29 +47,26 @@ script: |
   mkdir -p -v $locpath; cd $locpath
 
   # cganalysis comes after createsims
-  echo "Looking for $simname with oras repo list"
-  oras repo list $registry --plain-http | grep $simname
-  echo "Pulling oras artifact to $locpath"
-  oras pull $registry/$simname:createsims --plain-http
-
+  tag=createsim
+  uri=$registry/$simname:$tag
+  {{ template "oras-pull" . }}
   ls
   tar -xzvf createsims-output.tar.gz
   cd tmp/out
 
   # Note - for Kubernetes outpath will always be empty
-  # if we found some XTC then we take the most recent
   cframe=0
   echo ">> xtclast = $xtclast, cframe = $cframe"
   time pixi run --manifest-path /pixi-env/pixi.toml mummi_cganalysis \
                       --simname $simname \
-                      --path $locpath/tmp/out \
+                      --path $locpath/tmp/out {{ if eq .Job.Config.Gpus 0 }}--no-gpu{{ end }} \
                       --pathremote $outpath \
                       --siminputs $outpath \
                       --fstype mummi \
                       --fbio mummi \
                       --simbin gmx \
                       --backend GROMACS_PARTS \
-                      --simcores 6 \
+                      --simcores $OMP_NUM_THREADS \
                       --nprocs 1 \
                       --stopsimtime 600 \
                       --simruntime -1 \
@@ -82,7 +82,7 @@ script: |
       cd $outpath
       tar czf cganalysis-output.tar.gz /tmp/out
       echo "Simulation was successful, pushing result to $registry/$simname:cganalysis"
-      oras push --plain-http --insecure $registry/$simname:cganalysis cganalysis-output.tar.gz
+      oras push {{ if .Spec.Registry.PlainHttp }}--plain-http{{ end }} {{ if .Spec.Registry.TLSVerify }}{{ else }}--insecure{{ end }} $registry/$simname:cganalysis cganalysis-output.tar.gz
   fi    
   ls $outpath
   wait

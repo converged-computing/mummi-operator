@@ -120,6 +120,14 @@ type JobConfig struct {
 	// +optional
 	Nodes int32 `json:"nodes,omitempty"`
 
+	// Max active jobs (running and in queue)
+	// This should be set by the individual job, only if relevant.
+	// E.g., we might control the max number of createsim, anticipating
+	// each will trigger a cganalysis. Leave unset to allow up to max
+	// cluster size.
+	// +optional
+	MaxActive int32 `json:"maxActive,omitempty"`
+
 	// Number of processes per job
 	// +kubebuilder:default=1
 	// +default=1
@@ -187,6 +195,11 @@ type WorkflowManager struct {
 	// +default=6
 	// +optional
 	Nodes int32 `json:"nodes,omitempty"`
+
+	// Maximum nodes to allow cluster to scale to (that jobs add up to)
+	// If unset, will default to Nodes above (N=6)
+	// +optional
+	MaxNodes int32 `json:"maxNodes,omitempty"`
 
 	// Cores per node (deafults to 4) maps to NCORES_PER_NODED
 	// +kubebuilder:default=4
