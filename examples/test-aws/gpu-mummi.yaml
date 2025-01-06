@@ -1,0 +1,35 @@
+apiVersion: mummi.converged-computing.org/v1alpha1
+kind: MiniMummi
+metadata:
+  name: mummi-sample
+spec:
+
+  # registry we can use in-cluster defaults
+  mlserver:
+    image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlserver-gpu
+    config:
+      gpus: 1
+    # interactive: true
+
+  rabbitmq:
+    image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:rabbitmq
+
+  # Defaults to 6 mummi nnodes, interactive mode is for debugging
+  manager:
+    image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:wfmanager
+    numberMaxSelectedPatchBuffer: 5
+    
+  # Jobs for the Mummi workflow manager to submit / orchestrate
+  # Right now we use defaults for most things (bundle size, nodes, etc)
+  jobs:
+    cganalysis:
+      image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis-gpu
+      interactive: true
+      config:
+        gpus: 1
+    createsim:
+      image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:createsims-gpu
+      imagePullPolicy: Always
+      config:
+        gpus: 1
+

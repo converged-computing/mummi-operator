@@ -330,7 +330,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             environ.append({"name": key, "value": value})
         return environ
 
-    def generate_batch_job(self, step, configmap_name, environment=None):
+    def generate_batch_job(self, step, configmap_name):
         """
         Generate the job CRD assuming the config map entrypoitn.
         """
@@ -372,10 +372,15 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
 
         # Assume for now nvidia, this can be changed
         if ngpus > 0:
-            resources["nvidia.com/gpu"] = ngpus
+            gpu_label = step.run.get("gpulabel", "nvidia.com/gpu")
+            resources[gpu_label] = ngpus
 
         # Wrap as requests and limits
         resources = {"requests": resources, "limits": resources}
+
+        # Container image pull policy
+        pull_policy = step.run.get("pull_policy", "IfNotPresent")
+        print(f"Pull policy for {configmap_name} is {pull_policy}")
 
         # Job container to run the script
         # Do not define working directory assuming container is built with correct one
@@ -384,6 +389,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             name=configmap_name,
             command=[command[0]],
             args=command[1:],
+            image_pull_policy=pull_policy,
             volume_mounts=[
                 client.V1VolumeMount(
                     mount_path="/workdir",

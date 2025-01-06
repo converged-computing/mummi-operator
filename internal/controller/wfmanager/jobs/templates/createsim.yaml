@@ -54,11 +54,11 @@ script: |
   uri=$registry/$simname:$tag
   {{ template "oras-pull" . }}
 
+  {{ if .Job.Interactive }}sleep infinity{{ end }}
+
   #  --mpi "autobind-24 gmx mdrun" \
   #  --mdrunopt " -rdd 2.0 -ntomp 4 -dd 4 3 2 -nt 96" \
-  # vsoch: I removed -nb gpu
-  # --mdrunopt " -nb gpu -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" \
-  time pixi run --manifest-path /pixi-env/pixi.toml mummi_createsim \
+  time mummi_createsim \
     --fstype simple \
     --patch $simname \
     --inpath $(pwd) \
@@ -69,7 +69,7 @@ script: |
     --gromacs gmx \
     --mpi "gmx mdrun" \
     --mini \
-    --mdrunopt " -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" 2>&1 | tee $outfile
+    --mdrunopt " {{ if gt .Job.Config.Gpus 0 }}-nb gpu{{ end }} -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" 2>&1 | tee $outfile
 
   retval=$?
   if [ $retval -eq 0 ] && [ -f /tmp/out/createsims.tar.gz ]; 

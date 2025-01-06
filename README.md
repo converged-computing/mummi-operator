@@ -26,6 +26,10 @@ And for AWS (recommended for most cases):
 ```bash
 eksctl create cluster --config-file examples/eks-config-6.yaml
 aws eks update-kubeconfig --region us-east-2 --name mini-mummi
+
+# Or with GPUs
+eksctl create cluster --config-file examples/eks-config-gpu-6.yaml
+aws eks update-kubeconfig --region us-east-1 --name mini-mummi-gpu
 ```
 
 ## 2. Load Images
@@ -61,7 +65,7 @@ The operator is built via its manifest in dist. For development:
 make test-deploy-recreate
 ```
 
-For non-development
+For non-development:
 
 ```bash
 kubectl apply -f examples/dist/mummi-operator.yaml
@@ -69,14 +73,72 @@ kubectl apply -f examples/dist/mummi-operator.yaml
 
 ## 4. Deploy an Example Mini Mummi
 
+### a. Without GPU
+
+
 ```bash
+# Without GPU
 kubectl apply -f examples/test-aws/mummi.yaml 
+```
+
+### b. With GPU
+
+Test that you see the GPU devices:
+
+```bash
+kubectl get nodes -o json | grep nvidia.com/gpu
+
+# More specific
+kubectl get nodes -o json | jq -r .items[].status.capacity | grep nvidia
+```
+
+### c. GPU Operator
+
+If you are unfortunate enough to need to use this:
+
+```bash
+kubectl create ns gpu-operator
+kubectl label --overwrite ns gpu-operator pod-security.kubernetes.io/enforce=privileged
+
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
+helm repo update
+helm install --wait --generate-name -n gpu-operator --create-namespace nvidia/gpu-operator --version=v24.9.1 --set driver.enabled=false
+
+# Check labels and GPUs (you should see nvidia.com/gpu)
+kubectl get pods -n gpu-operator
+kubectl get nodes -o json | jq '.items[].metadata.labels'
+kubectl apply -f examples/test-aws/gpu-mummi.yaml 
+```
+
+Here is how to get the charts installed to the namespace and uninstall:
+
+```bash
+# Show the name generated in the gpu-operator namesapce
+helm list -n gpu-operator
+
+# Uninstall the chart
+helm uninstall -n gpu-operator gpu-operator-1736103287
+```
+
+Note that if the workflow manager isn't connecting, it's some race condition:
+
+```console
+[retry=1/100] No RPC server is listening on queue mummi_queue_mummiusr, retrying in 5 secondes ...
+```
+
+You should be able to delete the pod and it will be recreated.
+
+```bash
+kubectl delete pod  mummi-sample-wfmanager-64d87ddb87-6w8lb
 ```
 
 If you want to delete the deployment, and note that jobs are not tied to the Mummi Operator (intentionally) so you can delete them separately:
 
 ```bash
 kubectl delete -f examples/test-aws/mummi.yaml 
+
+# Or for GPU
+kubectl delete -f examples/test-aws/gpu-mummi.yaml 
 kubectl delete jobs --all
 ```
 
@@ -86,6 +148,7 @@ That is done so if the workflow manager or mlserver (or another component) needs
 
 ```bash
 eksctl delete cluster --config-file examples/eks-config-6.yaml --wait
+eksctl delete cluster --config-file examples/eks-config-gpu-6.yaml --wait
 ```
 
 
@@ -104,6 +167,9 @@ These are some design decisions I've made (of course open to discussion):
 
 ### TODO
 
+- We need to target deployments - e.g., rabbitmq does not need a GPU node. So we need:
+  - A cluster config that creates some number of GPUs, and some number of non-GPU nodes.
+  - A way to prevent the non gpu apps to be scheduled on GPU nodes.
 - We likely want to test with a real registry OR allow a volume bind (existing data) to the registry.
   - Otherwise, artifacts deleted on cleanup. We could also have an option that allows keeping the ephemeral registry.
 - Find source of warning `Unidentified hostname: wfmanager.mummi-sample.default.svc.cluster.local` in mummi-core
@@ -134,6 +200,7 @@ These are some design decisions I've made (of course open to discussion):
 - Can we have some capture of "no change" for an iteration, and not increase the iteration count until there is?
 - Why is the ML server not more tightly controlled as individual jobs?
   - There is a disconnect betweeen using the rabbit data to kick off work vs. always running the ML server first.
+  - It takes 5 minutes to get enough samples to start createsims, but they are generated in seconds.
 - I don't understand the "jobs to reclaim" use case - if a job times out, it will just fail and we can move on. What is reclaim for? And why/when cancel with timeout?
 - I noticed jobs that seem frozen (after ~4 hours) is that expected? The walltime (duration of the job) will eventually fail them (note, we should set what we think are reasonable timeouts)
 - Should we put a limit on what the ML server is outputting? I can limit the number that the wfmanager receives, but the MLServer keeps going. This can be problematic if it ovrwhelms the registry.
@@ -141,6 +208,7 @@ These are some design decisions I've made (of course open to discussion):
 - Should `OMP_NUM_THREADS` in the job entrypoints coincide with cores_per_task in the config?
 - Under what conditions do we cancel / cleanup jobs?
 - When should I do a PR to upstream mummi-ras? When everything working as we want?
+- When do we cleanup old jobs / config maps? If we need them for state, we have to keep around.
 
 ## Debugging
 
