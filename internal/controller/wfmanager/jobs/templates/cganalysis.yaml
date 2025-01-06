@@ -57,7 +57,10 @@ script: |
   # Note - for Kubernetes outpath will always be empty
   cframe=0
   echo ">> xtclast = $xtclast, cframe = $cframe"
-  time pixi run --manifest-path /pixi-env/pixi.toml mummi_cganalysis \
+
+  {{ if .Job.Interactive }}sleep infinity{{ end }}
+
+  time mummi_cganalysis \
                       --simname $simname \
                       --path $locpath/tmp/out {{ if eq .Job.Config.Gpus 0 }}--no-gpu{{ end }} \
                       --pathremote $outpath \

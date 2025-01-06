@@ -102,6 +102,12 @@ spec:
                           Namespace is inherited from MiniMummi Spec
                           container image for job (createsim or cganalysis)
                         type: string
+                      imagePullPolicy:
+                        description: Image pull policy (defaults to IfNotPresent)
+                        type: string
+                      interactive:
+                        description: Run in interactive mode for debugging
+                        type: boolean
                     type: object
                   createsim:
                     description: CreateSim holds the createsim job
@@ -155,7 +161,22 @@ spec:
                           Namespace is inherited from MiniMummi Spec
                           container image for job (createsim or cganalysis)
                         type: string
+                      imagePullPolicy:
+                        description: Image pull policy (defaults to IfNotPresent)
+                        type: string
+                      interactive:
+                        description: Run in interactive mode for debugging
+                        type: boolean
                     type: object
+                type: object
+              labels:
+                description: Customize how Mummi asks for resources
+                properties:
+                  gpu:
+                    description: |-
+                      How to ask for GPUs
+                      A value of "present" will return true and not the count
+                    type: string
                 type: object
               manager:
                 description: |-
@@ -373,6 +394,10 @@ spec:
                   config:
                     description: Config is the MLServer configuration
                     properties:
+                      gpus:
+                        description: GPUs for the MLServer
+                        format: int32
+                        type: integer
                       logging:
                         description: Logging configuration and options
                         properties:

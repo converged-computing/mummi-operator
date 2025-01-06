@@ -80,9 +80,34 @@ type MiniMummiSpec struct {
 	RabbitMQ        RabbitMQ        `json:"rabbitmq,omitempty"`
 	WorkflowManager WorkflowManager `json:"manager,omitempty"`
 
+	// Customize how Mummi asks for resources
+	Labels Labels `json:"labels,omitempty"`
+
 	// MiniMummi Job interface, each maps to K8s job
 	// +optional
 	Jobs MummiJobs `json:"jobs,omitempty"`
+}
+
+type Labels struct {
+
+	// How to ask for GPUs
+	// A value of "present" will return true and not the count
+	// + optional
+	GPU string `json:"gpu,omitempty"`
+}
+
+// Get GPU Label returns the GPU label name and value
+// We base this on a count. However, not all labels support a count
+func (m *MiniMummi) GetGPULabel(count int32) (string, string) {
+
+	// Do we have a custom label set?
+	labelName := "nvidia.com/gpu"
+	labelValue := fmt.Sprintf("%d", count)
+
+	if m.Spec.Labels.GPU != "" {
+		labelName = m.Spec.Labels.GPU
+	}
+	return labelName, labelValue
 }
 
 // MummiJobs holds the two MiniMummi jobs we care about currently
@@ -170,6 +195,14 @@ type MummiJob struct {
 	// container image for job (createsim or cganalysis)
 	// +omitempty
 	Image string `json:"image,omitempty"`
+
+	// Image pull policy (defaults to IfNotPresent)
+	// +omitempty
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
+
+	// Run in interactive mode for debugging
+	// +omitempty
+	Interactive bool `json:"interactive,omitempty"`
 
 	// Variables are the simname (supplied by jobTracker)
 	// and output / other paths that should not be customized
@@ -460,6 +493,10 @@ type MLServerConfig struct {
 	// +default=1
 	// +optional
 	Nodes int32 `json:"nodes,omitempty"`
+
+	// GPUs for the MLServer
+	// +optional
+	Gpus int32 `json:"gpus,omitempty"`
 
 	// OMP_NUM_THREADS (defaults to 4)
 	// +kubebuilder:default=4

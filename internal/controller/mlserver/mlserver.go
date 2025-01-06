@@ -5,6 +5,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/converged-computing/mummi-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -54,6 +55,17 @@ func NewMLServerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 				MountPath: "/cert_rabbitmq/",
 			},
 		},
+	}
+	// Are we asking for GPU?
+	if spec.Spec.MLServer.Config.Gpus > 0 {
+		labelName, labelValue := spec.GetGPULabel(spec.Spec.MLServer.Config.Gpus)
+		gpuResource := corev1.ResourceList{
+			corev1.ResourceName(labelName): resource.MustParse(labelValue),
+		}
+		container.Resources = corev1.ResourceRequirements{
+			Limits:   gpuResource,
+			Requests: gpuResource,
+		}
 	}
 
 	// This configmap has entrypoint.sh and kubernetes_start.sh
