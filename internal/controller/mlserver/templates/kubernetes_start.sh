@@ -6,10 +6,10 @@
 mummi_mlserver_nnodes=${1:-1}
 
 # Use provided container mummi_ras
-MUMMI_APP={{ if .Spec.Paths.MummiRoot }}{{ .Spec.Paths.MummiRoot }}{{ else }}/opt/clones/mummi-ras{{ end }}
-export MUMMI_ROOT=$MUMMI_APP
+MUMMI_ROOT={{ if .Spec.Paths.MummiRoot }}{{ .Spec.Paths.MummiRoot }}{{ else }}/opt/clones/mummi-ras{{ end }}
+MUMMI_APP={{ if .Spec.Paths.MummiApp }}{{ .Spec.Paths.MummiApp }}{{ else }}/opt/mummi-app{{ end }}
 export MUMMI_RESOURCES={{ if .Spec.Paths.MummiResources }}{{ .Spec.Paths.MummiResources }}{{ else }}/opt/clones/mummi_resources{{ end }}
-export MUMMI_APP
+export MUMMI_APP MUMMI_ROOT
 
 mlserver_exe="python3 $MUMMI_APP/mummi_ras/scripts/run_mlserver.py"
 mlserver_cmd=""

@@ -14,16 +14,11 @@
 
 import json
 import os
-import time
-from functools import wraps
 from itertools import count
 from logging import getLogger
 from typing import List
 
-# Not sure if this is just here to init some state?
-import mummi_core
 from maestrowf.abstracts.enums import CancelCode, SubmissionCode
-
 # These are added just for maestro and the custom adapter
 from maestrowf.abstracts.interfaces import SchedulerScriptAdapter
 from maestrowf.interfaces.script import SubmissionRecord
@@ -823,9 +818,6 @@ class KubernetesTracker(JobTracker):
         if (nrunning == 0) and (nqueued == 0):
             return [], []
 
-        _data = [f"running={nrunning}", f"queued={nqueued}"]
-        self.write_history("restore", _data, "restore")
-
         # This isn't really a restore, it's a discovery
         LOGGER.info(f"[{self.type}] Found {nqueued} queued and {nrunning} running jobs")
         LOGGER.info(self.__str__())
@@ -889,7 +881,6 @@ class KubernetesTracker(JobTracker):
                 submit_success.append(sim_name)
 
         n = len(submit_success)
-        self.write_history(f"appended_to_queue", submit_success, "add_to_queue")
         LOGGER.debug(f"[{self.type}]  {n} sims: {self.__str__()}: {submit_success}")
         return submit_success
 
@@ -941,9 +932,6 @@ class KubernetesTracker(JobTracker):
         LOGGER.debug(f"[{self.type}] sims: continue = {(len(jobs['continue']))}")
         LOGGER.debug(f"[{self.type}] sims: unknown = {len(jobs['unknown'])}")
         LOGGER.debug(f"[{self.type}] sims: queued = {len(jobs['queued'])}")
-
-        self.write_history("found_success", jobs["success"], "update")
-        self.write_history("found_failed", jobs["failed"], "update")
 
         # return the successful and failed sims for further processing
         return jobs["success"], jobs["failed"]

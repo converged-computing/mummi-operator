@@ -24,7 +24,7 @@ spec:
   jobs:
     cganalysis:
       image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis-gpu
-      interactive: true
+      # interactive: true
       config:
         gpus: 1
     createsim:

@@ -5,7 +5,7 @@ wfmanager:
   config:
     # --------------------------------------------------------------------------
     # different run modes
-    is_gc: {{ if .Spec.WorkflowManager.IsGC }}1{{ else }}0{{ end }}
+    is_gc: 1
     do_patchcreation:    {{ if .Spec.WorkflowManager.DoPatchCreation }}1{{ else }}0{{ end }}
     do_workflow:         {{ if .Spec.WorkflowManager.DoWorkflow }}1{{ else }}0{{ end }}
     do_schedulejobs:     {{ if .Spec.WorkflowManager.DoScheduleJobs }}1{{ else }}0{{ end }}
