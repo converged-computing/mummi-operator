@@ -249,12 +249,6 @@ type WorkflowManager struct {
 	Logging Logging `json:"logging,omitempty"`
 	// Workspace was also empty, read from config.yaml and left out
 
-	// is_gc == is garbage collecting? (defaults to true)
-	// +kubebuilder:default=true
-	// +default=true
-	// +optional
-	IsGC bool `json:"isGC"`
-
 	// Should we do patch creation? (defaults to false)
 	// +optional
 	DoPatchCreation bool `json:"doPatchCreation"`
@@ -325,12 +319,15 @@ type WorkflowManager struct {
 	// maps to fbcg_do_wts
 	FeedbackCGDoWeights bool `json:"feedbackCGDoWeights,omitempty"`
 
+	// feedback "all atoms" (aa)
+	// cg means "course grained" (group atoms together so goes faster, but less accurate)
 	// fbaa_hvr_th
 	// +kubebuilder:default="0.25"
 	// +default="0.25"
 	// +optional
 	FeedbackAAHvrThreshold string `json:"feedbackAAHvrThreshold,omitempty"`
 
+	// crd == name of protein
 	// fbaa_crd_th:          0.2    # 0.1975  # Suggested range 0.2-0.3
 	// +kubebuilder:default="0.2"
 	// +default="0.2"
@@ -442,6 +439,12 @@ type MummiPaths struct {
 	// +default="/opt/clones/mummi-ras"
 	// +optional
 	MummiRoot string `json:"mummiRoot,omitempty"`
+
+	// Application data
+	// +kubebuilder:default="/opt/mummi-app"
+	// +default="/opt/mummi-app"
+	// +optional
+	MummiApp string `json:"mummiApp,omitempty"`
 
 	// Root for certificates
 	// +kubebuilder:default="/opt/clones/certs"

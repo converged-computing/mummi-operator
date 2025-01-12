@@ -157,6 +157,7 @@ eksctl delete cluster --config-file examples/eks-config-gpu-6.yaml --wait
 These are some design decisions I've made (of course open to discussion):
 
  - state is derived from Kubernetes, and not relying on some filesystem state
+ - we assume jobs don't need to be paused / resumed / reclaimed like on HPC
  - internal: all of the controller logic, etc. should be internal
  - I'm trying to add kubernetes functionality in a way that doesn't disturb (change) core mummi. E.g., entrypoints and environment variables.
  - If/when the operator is deleted, jobs (createsim and cganalysis) are not. I think this might make sense if the orchestration needs update without destroying the jobs.
@@ -167,45 +168,26 @@ These are some design decisions I've made (of course open to discussion):
 
 ### TODO
 
+- We don't want wfmanager to come up before mlserver (need to add some ready condition)
+- Can we rewrite mlserver (package it) as a job?
+  - rabbitmq queues up requests for new samples
+  - the ML server sample generation could also be some kind of more modular unit (job)
 - We need to target deployments - e.g., rabbitmq does not need a GPU node. So we need:
   - A cluster config that creates some number of GPUs, and some number of non-GPU nodes.
   - A way to prevent the non gpu apps to be scheduled on GPU nodes.
 - We likely want to test with a real registry OR allow a volume bind (existing data) to the registry.
   - Otherwise, artifacts deleted on cleanup. We could also have an option that allows keeping the ephemeral registry.
 - Find source of warning `Unidentified hostname: wfmanager.mummi-sample.default.svc.cluster.local` in mummi-core
-- Sometimes the wfmanager (starting too quickly after rabbitmq) fails to start, and I added a sleep to fix. A more robust solution is ideal.
-- Verify MLServer needs exactly one node, add affinity, what about wfmanager?
-- testing is needed for:
-  - oras with external artifact registry
-  - running jobs with GPU (need to discuss budget)
 - wfmanager: when mummi python cloneable, can install (clone) on demand
 - mlserver model should eventually be customizable (currently built into container)
 - rabbitmq and wfmanager: My certificate generation is off - I am missing the p12 files (need to be generated in go). It generates handshake error. Disabled for now but needs to be reenabled by adding the cert file back.
 
 ### Questions
 
-- Is mummi_core imported to init some state or can we remove it?
-- Where is job tracker write_history written? If to the filesystem, doesn't make sense to keep (maybe should delete). What is goal?
-- What does wfmanager->is_gc mean? Is garbage collecting?
-- The wfmanager has a currently empty environment variable section. What is that for?
-- I'm still not sure about purpose (and need for) `/opt/clones/mummi-ras/macro/simlist.spec`. It seems like I shouldn't need it? I haven't fully tested without it, I know there is minimally a warning without it. What is it?
-- What do each of the following mean (I am guessing th == threshold? I want to have descriptive variables)
-  - fbaa_hvr_th
-  -	fbaa_crd_th
-  - fbaa_frame_increment 
-- What is the difference between `MUMMI_ROOT` and `MUMMI_APP`? The second makes sense (e.g., /opt/clones/mummi-ras) but the first is always set to the second. I'd expect it be something like /opt/clones where there are more assets.
-  - Note that I am just taking in MUMMI_ROOT as a parameter and setting the app to that
-- There is some state of "the job ended but the simuation needs to continue" that I want to avoid for this design. Can we assume a job can be given a long enough timelimit? If not, can we have a special exit code to indicate needs to continue? Or another marker?
-  - How would restart happen in an ephemeral job? See kubernetesJobTracker.py when job created - there is restart path I think we can nix.
 - Can we have some capture of "no change" for an iteration, and not increase the iteration count until there is?
 - Why is the ML server not more tightly controlled as individual jobs?
   - There is a disconnect betweeen using the rabbit data to kick off work vs. always running the ML server first.
   - It takes 5 minutes to get enough samples to start createsims, but they are generated in seconds.
-- I don't understand the "jobs to reclaim" use case - if a job times out, it will just fail and we can move on. What is reclaim for? And why/when cancel with timeout?
-- I noticed jobs that seem frozen (after ~4 hours) is that expected? The walltime (duration of the job) will eventually fail them (note, we should set what we think are reasonable timeouts)
-- Should we put a limit on what the ML server is outputting? I can limit the number that the wfmanager receives, but the MLServer keeps going. This can be problematic if it ovrwhelms the registry.
-- What is the affinity of each createsim, etc? (this will help to set an upper limit for what is running)
-- Should `OMP_NUM_THREADS` in the job entrypoints coincide with cores_per_task in the config?
 - Under what conditions do we cancel / cleanup jobs?
 - When should I do a PR to upstream mummi-ras? When everything working as we want?
 - When do we cleanup old jobs / config maps? If we need them for state, we have to keep around.

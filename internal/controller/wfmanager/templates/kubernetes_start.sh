@@ -34,10 +34,10 @@ fi
 export PYTHONPATH=$PYTHONPATH:/opt
 
 # Use provided container mummi_ras
-MUMMI_APP={{ if .Spec.Paths.MummiRoot }}{{ .Spec.Paths.MummiRoot }}{{ else }}/opt/clones/mummi-ras{{ end }}
-export MUMMI_ROOT=$MUMMI_APP
+MUMMI_ROOT={{ if .Spec.Paths.MummiRoot }}{{ .Spec.Paths.MummiRoot }}{{ else }}/opt/clones/mummi-ras{{ end }}
+MUMMI_APP={{ if .Spec.Paths.MummiApp }}{{ .Spec.Paths.MummiApp }}{{ else }}/opt/mummi-app{{ end }}
 export MUMMI_RESOURCES={{ if .Spec.Paths.MummiResources }}{{ .Spec.Paths.MummiResources }}{{ else }}/opt/clones/mummi_resources{{ end }}
-export MUMMI_APP
+export MUMMI_APP MUMMI_ROOT
 
 echo "(`hostname`: `date`) --> Launching MuMMI workflow ($mummi_nnodes nodes)"
 pushd $MUMMI_ROOT/workspace > /dev/null 2>&1
@@ -84,14 +84,6 @@ chmod +x /usr/local/bin/rabbitmqadmin
 
 # Create dummy credentials
 mkdir -p $MUMMI_ROOT/mlserver
-
-# QUESTION LOIC: Should this list come from somewhere?
-# mkdir -p /opt/clones/mummi-ras/macro
-# cat <<EOF > /opt/clones/mummi-ras/macro/simlist.spec
-# mu18-2ras2raf0ras4A0raf4A-i7.tar,run30.cfg,2
-# mu18-2ras2raf0ras4A0raf4A-i8.tar,run30.cfg,2
-# mu18-2ras2raf0ras4A0raf4A-i9.tar,run30.cfg,2
-# EOF
 
 # Tidbits from the setup_env.sh script
 
