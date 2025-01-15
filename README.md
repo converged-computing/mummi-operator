@@ -2,6 +2,8 @@
 
 > Hello! I'm the mini mummi! 🦛
 
+![img/mummi-operator.png](img/mummi-operator.png)
+
 The Mummi Operator is intended to run MiniMummi. 
 
 ## Usage
