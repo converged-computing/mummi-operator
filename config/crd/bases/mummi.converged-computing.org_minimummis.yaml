@@ -204,7 +204,10 @@ spec:
                     type: string
                   feedbackAAHvrThreshold:
                     default: "0.25"
-                    description: fbaa_hvr_th
+                    description: |-
+                      feedback "all atoms" (aa)
+                      cg means "course grained" (group atoms together so goes faster, but less accurate)
+                      fbaa_hvr_th
                     type: string
                   feedbackCGDoWeights:
                     description: |-
@@ -214,8 +217,9 @@ spec:
                     type: boolean
                   feedbackCrdThreshold:
                     default: "0.2"
-                    description: 'fbaa_crd_th:          0.2    # 0.1975  # Suggested
-                      range 0.2-0.3'
+                    description: |-
+                      crd == name of protein
+                      fbaa_crd_th:          0.2    # 0.1975  # Suggested range 0.2-0.3
                     type: string
                   feedbackFrameIncrement:
                     default: 25000
@@ -240,10 +244,6 @@ spec:
                       Filesystem and I/O ---------------------------------------------------------------
                       what type of file system to use (valid values: 'simple' / 'taridx / dbr / mummi')
                     type: string
-                  isGC:
-                    default: true
-                    description: is_gc == is garbage collecting? (defaults to true)
-                    type: boolean
                   logging:
                     description: Logging configuration and options
                     properties:
@@ -554,6 +554,10 @@ spec:
                   certs:
                     default: /opt/clones/certs
                     description: Root for certificates
+                    type: string
+                  mummiApp:
+                    default: /opt/clones/mummi-ras
+                    description: Application data
                     type: string
                   mummiResources:
                     default: /opt/clones/mummi_resources

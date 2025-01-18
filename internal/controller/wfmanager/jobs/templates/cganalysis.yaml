@@ -71,8 +71,8 @@ script: |
                       --backend GROMACS_PARTS \
                       --simcores $OMP_NUM_THREADS \
                       --nprocs 1 \
-                      --stopsimtime 600 \
-                      --simruntime -1 \
+                      --stopsimtime 100 \
+                      --simruntime 0.5 \
                       --logstdout \
                       --loglevel 2 \
                       --mini \
@@ -86,6 +86,11 @@ script: |
       tar czf cganalysis-output.tar.gz /tmp/out
       echo "Simulation was successful, pushing result to $registry/$simname:cganalysis"
       oras push {{ if .Spec.Registry.PlainHttp }}--plain-http{{ end }} {{ if .Spec.Registry.TLSVerify }}{{ else }}--insecure{{ end }} $registry/$simname:cganalysis cganalysis-output.tar.gz
-  fi    
+  else
+      cd $outpath
+      tar czf cganalysis-output.tar.gz /tmp/out
+      echo "Simulation had non zero exit code, pushing result to $registry/$simname:cganalysis-fail"
+      oras push {{ if .Spec.Registry.PlainHttp }}--plain-http{{ end }} {{ if .Spec.Registry.TLSVerify }}{{ else }}--insecure{{ end }} $registry/$simname:cganalysis-fail cganalysis-output.tar.gz
+  fi
   ls $outpath
   wait

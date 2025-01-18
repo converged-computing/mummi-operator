@@ -441,8 +441,8 @@ type MummiPaths struct {
 	MummiRoot string `json:"mummiRoot,omitempty"`
 
 	// Application data
-	// +kubebuilder:default="/opt/mummi-app"
-	// +default="/opt/mummi-app"
+	// +kubebuilder:default="/opt/clones/mummi-ras"
+	// +default="/opt/clones/mummi-ras"
 	// +optional
 	MummiApp string `json:"mummiApp,omitempty"`
 
@@ -608,6 +608,13 @@ type RabbitMQ struct {
 	// +default=1
 	// +optional
 	Replicas int32 `json:"replicas,omitempty"`
+
+	// Default consumer timeout in ms
+	// If unset, defaults to 3 hours
+	// +kubebuilder:default=10800000
+	// +default=10800000
+	// +optional
+	ConsumerTimeout int32 `json:"consumerTimeout,omitempty"`
 }
 
 // PlainHttp exposes the expected positive variant of the variable
@@ -701,8 +708,8 @@ type MLServerSampler struct {
 	// It is useful when many createsims are failing and we need to generate more
 
 	// Feedback extra strucutres
-	// +kubebuilder:default=2
-	// +default=2
+	// +kubebuilder:default=1
+	// +default=1
 	// +optional
 	FactorExtraStructures int32 `json:"factorExtraStructures,omitempty"`
 
