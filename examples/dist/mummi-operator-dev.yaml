@@ -93,6 +93,12 @@ spec:
                             description: Number of processes per job
                             format: int32
                             type: integer
+                          retryFailure:
+                            description: |-
+                              If the job fails, try again? Defaults to false
+                              because we assume the initial data is bad.
+                              RetryFailure
+                            type: boolean
                           walltime:
                             description: Walltime (in string format) for the job
                             type: string
@@ -152,6 +158,12 @@ spec:
                             description: Number of processes per job
                             format: int32
                             type: integer
+                          retryFailure:
+                            description: |-
+                              If the job fails, try again? Defaults to false
+                              because we assume the initial data is bad.
+                              RetryFailure
+                            type: boolean
                           walltime:
                             description: Walltime (in string format) for the job
                             type: string
@@ -212,7 +224,10 @@ spec:
                     type: string
                   feedbackAAHvrThreshold:
                     default: "0.25"
-                    description: fbaa_hvr_th
+                    description: |-
+                      feedback "all atoms" (aa)
+                      cg means "course grained" (group atoms together so goes faster, but less accurate)
+                      fbaa_hvr_th
                     type: string
                   feedbackCGDoWeights:
                     description: |-
@@ -222,8 +237,9 @@ spec:
                     type: boolean
                   feedbackCrdThreshold:
                     default: "0.2"
-                    description: 'fbaa_crd_th:          0.2    # 0.1975  # Suggested
-                      range 0.2-0.3'
+                    description: |-
+                      crd == name of protein
+                      fbaa_crd_th:          0.2    # 0.1975  # Suggested range 0.2-0.3
                     type: string
                   feedbackFrameIncrement:
                     default: 25000
@@ -248,10 +264,6 @@ spec:
                       Filesystem and I/O ---------------------------------------------------------------
                       what type of file system to use (valid values: 'simple' / 'taridx / dbr / mummi')
                     type: string
-                  isGC:
-                    default: true
-                    description: is_gc == is garbage collecting? (defaults to true)
-                    type: boolean
                   logging:
                     description: Logging configuration and options
                     properties:
@@ -477,7 +489,7 @@ spec:
                     description: The Sampler for the MLServer
                     properties:
                       factorExtraStructures:
-                        default: 2
+                        default: 1
                         description: Feedback extra strucutres
                         format: int32
                         type: integer
@@ -563,6 +575,10 @@ spec:
                     default: /opt/clones/certs
                     description: Root for certificates
                     type: string
+                  mummiApp:
+                    default: /opt/clones/mummi-ras
+                    description: Application data
+                    type: string
                   mummiResources:
                     default: /opt/clones/mummi_resources
                     description: Defaults to MummiRoot if not set (eliminate this
@@ -589,6 +605,13 @@ spec:
                         description: Name of queue to use for mummi (defaults to mummi_queue)
                         type: string
                     type: object
+                  consumerTimeout:
+                    default: 10800000
+                    description: |-
+                      Default consumer timeout in ms
+                      If unset, defaults to 3 hours
+                    format: int32
+                    type: integer
                   image:
                     description: container image for rabbitmq
                     type: string

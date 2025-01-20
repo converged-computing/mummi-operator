@@ -29,6 +29,16 @@ And for AWS (recommended for most cases):
 eksctl create cluster --config-file examples/eks-config-6.yaml
 aws eks update-kubeconfig --region us-east-2 --name mini-mummi
 
+# hpc6a cpu instances
+# cpu createsim container pull: 70-80 seconds
+#                      runtime: 21-?24 minutes
+# cpu cganalysis          pull: 93 seconds
+# cganalysis
+# debug issue with rabbitmq disconnecting
+# add max cganalysis check, should send request back to operator to terminate everything but the registry.
+eksctl create cluster --config-file examples/eks-config-hpc6a.yaml
+aws eks update-kubeconfig --region us-east-2 --name mini-mummi
+
 # Or with GPUs
 eksctl create cluster --config-file examples/eks-config-gpu-6.yaml
 aws eks update-kubeconfig --region us-east-1 --name mini-mummi-gpu
@@ -170,6 +180,8 @@ These are some design decisions I've made (of course open to discussion):
 
 ### TODO
 
+- Right now we base the max jobs and they include completed, we need to not account for those.
+- need a general way to add job parameters (e.g., stopsimtime)
 - We don't want wfmanager to come up before mlserver (need to add some ready condition)
 - Can we rewrite mlserver (package it) as a job?
   - rabbitmq queues up requests for new samples
