@@ -180,6 +180,7 @@ These are some design decisions I've made (of course open to discussion):
 
 ### TODO
 
+- Right now we base the max jobs and they include completed, we need to not account for those.
 - need a general way to add job parameters (e.g., stopsimtime)
 - We don't want wfmanager to come up before mlserver (need to add some ready condition)
 - Can we rewrite mlserver (package it) as a job?

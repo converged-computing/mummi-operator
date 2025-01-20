@@ -174,6 +174,12 @@ type JobConfig struct {
 	// +optional
 	Nested bool `json:"nested,omitempty"`
 
+	// If the job fails, try again? Defaults to false
+	// because we assume the initial data is bad.
+	// RetryFailure
+	// +optional
+	RetryFailure bool `json:"retryFailure,omitempty"`
+
 	// Walltime (in string format) for the job
 	// +optional
 	Walltime string `json:"walltime,omitempty"`

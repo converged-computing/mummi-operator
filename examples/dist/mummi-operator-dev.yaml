@@ -93,6 +93,12 @@ spec:
                             description: Number of processes per job
                             format: int32
                             type: integer
+                          retryFailure:
+                            description: |-
+                              If the job fails, try again? Defaults to false
+                              because we assume the initial data is bad.
+                              RetryFailure
+                            type: boolean
                           walltime:
                             description: Walltime (in string format) for the job
                             type: string
@@ -152,6 +158,12 @@ spec:
                             description: Number of processes per job
                             format: int32
                             type: integer
+                          retryFailure:
+                            description: |-
+                              If the job fails, try again? Defaults to false
+                              because we assume the initial data is bad.
+                              RetryFailure
+                            type: boolean
                           walltime:
                             description: Walltime (in string format) for the job
                             type: string
@@ -477,7 +489,7 @@ spec:
                     description: The Sampler for the MLServer
                     properties:
                       factorExtraStructures:
-                        default: 2
+                        default: 1
                         description: Feedback extra strucutres
                         format: int32
                         type: integer
@@ -593,6 +605,13 @@ spec:
                         description: Name of queue to use for mummi (defaults to mummi_queue)
                         type: string
                     type: object
+                  consumerTimeout:
+                    default: 10800000
+                    description: |-
+                      Default consumer timeout in ms
+                      If unset, defaults to 3 hours
+                    format: int32
+                    type: integer
                   image:
                     description: container image for rabbitmq
                     type: string

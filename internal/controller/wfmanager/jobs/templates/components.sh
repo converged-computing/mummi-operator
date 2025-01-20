@@ -9,10 +9,10 @@ config:
   ngpus:            {{ .Job.Config.Gpus }}
   walltime:         {{ if .Job.Config.Walltime }}'{{ .Job.Config.Walltime }}'{{ else }}'0:45:00'{{ end }}
   max_active_jobs:  {{ if .Job.Config.MaxActive }}{{ .Job.Config.MaxActive }}{{ else }}2{{ end }}
-
   # Kubernetes specific settings
   gpulabel:         {{ if .Spec.Labels.GPU }}{{ .Spec.Labels.GPU }}{{ else }}nvidia.com/gpu{{ end }}
   pull_policy:      {{ .Job.ImagePullPolicy }}
+  retry_failure:    {{ if .Job.Config.RetryFailure }}true{{ else }}false{{ end }}
 
   # If this job is nested (run inside batch ob - leave out entirely if not)
   {{ if .Job.Config.Nested }}nested: True{{ end }}

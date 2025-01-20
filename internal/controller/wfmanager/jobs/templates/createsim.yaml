@@ -79,6 +79,10 @@ script: |
       tar czf createsims-output.tar.gz /tmp/out
       echo "Simulation was successful, pushing result to $registry/$simname:createsim"
       oras push {{ if .Spec.Registry.PlainHttp }}--plain-http{{ end }} {{ if .Spec.Registry.TLSVerify }}{{ else }}--insecure{{ end }} $registry/$simname:createsim createsims-output.tar.gz
+  else
+      # We don't want to trigger a cganalysis if the job fails
+      echo "Simulation was not successful"
+      exit 1
   fi    
   ls $outpath
   wait

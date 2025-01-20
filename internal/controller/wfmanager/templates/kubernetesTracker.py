@@ -17,8 +17,8 @@ import os
 from itertools import count
 from logging import getLogger
 from typing import List
+from enum import Enum
 
-from maestrowf.abstracts.enums import CancelCode, SubmissionCode
 # These are added just for maestro and the custom adapter
 from maestrowf.abstracts.interfaces import SchedulerScriptAdapter
 from maestrowf.interfaces.script import SubmissionRecord
@@ -34,6 +34,18 @@ config.load_incluster_config()
 
 # This would assume external to it
 # config.load_kube_config()
+true_options = ["true", True, "1", 1]
+
+
+# We need to handle conflict
+class SubmissionCode(Enum):
+    OK = 0
+    ERROR = 1
+    CONFLICT = 2
+
+class CancelCode(Enum):
+    OK = 0
+    ERROR = 1
 
 
 class KubernetesScriptAdapter(SchedulerScriptAdapter):
@@ -429,13 +441,21 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
                 "subdomain": "r",
             },
         }
+
+        # Do we want the job to terminate after failure?
+        spec = client.V1JobSpec(
+            parallelism=nodes, completions=nodes, suspend=False, template=template
+        )
+
+        # These options are required for the job to fail if the pod fails
+        if step.run.get("retry_failure") in true_options:
+            spec.backoffLimit=0
+
         return client.V1Job(
             api_version="batch/v1",
             kind="Job",
             metadata=metadata,
-            spec=client.V1JobSpec(
-                parallelism=nodes, completions=nodes, suspend=False, template=template
-            ),
+            spec=spec,
         )
 
     def submit(self, step, path, cwd, job_map=None, env=None):
@@ -477,7 +497,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
                 LOGGER.warning(
                     f"Batch job for {step.name} exists, assuming resumed: {e.reason}"
                 )
-                submit_status = SubmissionCode.OK
+                submit_status = SubmissionCode.CONFLICT
             else:
                 LOGGER.info(f"There was a create job error: {e.reason}")
                 submit_status = SubmissionCode.ERROR
@@ -754,8 +774,16 @@ class KubernetesTracker(JobTracker):
         # submit cmd_script to adapter and append (jobid, simname) to queue
         submit_record = self.adapter.submit(step, cmd_script, self.workspace)
 
+        # A conflcit means the job is already running. We don't want to count
+        # it as a new submit (it will already be represented in the state)
+        if submit_record.submission_code == SubmissionCode.CONFLICT:
+            LOGGER.error(
+                f"[{self.type}] Found already running {self.type} job (Conflict) for simname = {sim_name}"
+            )
+            return False
+
         # Allow it to fail and attempt cleanup
-        if not submit_record or submit_record.submission_code != SubmissionCode.OK:
+        elif not submit_record or submit_record.submission_code != SubmissionCode.OK:
             LOGGER.error(
                 f"[{self.type}] Failed to submit a {self.type} job for simname = {sim_name}"
             )
@@ -854,8 +882,7 @@ class KubernetesTracker(JobTracker):
             LOGGER.warning(f"[{self.type}] Found only {len(sim_names)} unique sims")
             n = len(sim_names)
 
-        # don't add those that are already accounted for
-        # Note that I removed a write to history here for "rejected"
+        # Don't add those that are already accounted for
         jobs = self.list_jobs_by_status()
         active_jobs = len(jobs["queued"]) + len(jobs["continue"])
         sim_names = [x for x in sim_names if x not in jobs["all"]]
@@ -868,7 +895,7 @@ class KubernetesTracker(JobTracker):
         # Otherwise, submit. If there is an issue, we'd try again.
         submit_success = []
         for sim_name in sim_names:
-            # Have we gone over the allowed active jobs?
+            # Have we gone over the allowed active (not completed) jobs?
             current_jobs = len(submit_success) + active_jobs
             if current_jobs >= self.max_jobs_total:
                 LOGGER.warning(
