@@ -53,6 +53,7 @@ if __name__ == "__main__":
         entry_points={
             "console_scripts": [
                 "mummi-manager=mummi_operator.manager:main",
+                "mummi-ml=mummi_operator.ml:main",
             ]
         },
     )

@@ -10,7 +10,7 @@ from mummi_operator.client import get_subparser_helper
 from mummi_operator.config import load_config
 from mummi_operator.logger import setup_logger
 
-from .mlserver import MLServer
+from .runner import MLRunner
 
 
 def get_parser():
@@ -59,9 +59,9 @@ def get_parser():
     return parser
 
 
-def load_mlserver_config(config_dir, config_file):
+def load_mlrunner_config(config_dir, config_file):
     """
-    load and validate content of MLServer config
+    load and validate content of MLRunner config
     """
     config = load_config(config_dir, config_file)
     if config.get("encoder") is None or config["encoder"].get("path") is None:
@@ -103,7 +103,7 @@ def main():
 
     def help(return_code=0):
         version = mummi_operator.__version__
-        print("\nMummi Operator Machine Learning Job v%s" % version)
+        print("\nMummi Operator Machine Learning Runner v%s" % version)
         parser.print_help()
         sys.exit(return_code)
 
@@ -125,14 +125,14 @@ def main():
     mummi_core.init()
     mummi_core.create_root()
 
-    config = load_mlserver_config(args.config_dir, args.config)
+    config = load_mlrunner_config(args.config_dir, args.config)
     mummi_core.init_logger(config=config["config"])
     try:
-        server = MLServer(config=config, logger=LOGGER, number_samples=args.number_samples)
+        server = MLRunner(config=config, logger=LOGGER, number_samples=args.number_samples)
         server.setup()
         server.run()
     except Exception as e:
-        LOGGER.error(f"> Exiting ML server due to error ({e})")
+        LOGGER.error(f"> Exiting ML runner due to error ({e})")
         traceback.print_exc()
         exit(1)
 

@@ -375,9 +375,9 @@ def create_sets(training_data_files: List[str]) -> List[List]:
     return lsp_sets
 
 
-class MLServer:
+class MLRunner:
     """
-    ML server implementation for Mummi Operator
+    ML runner implementation for Mummi Operator
 
     Intended to be run as a job.
     """
