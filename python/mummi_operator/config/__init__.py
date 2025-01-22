@@ -1,1 +1,1 @@
-from .config import load_config, load_workload_config
+from .config import load_config, load_workflow_config

@@ -382,9 +382,9 @@ class MLRunner:
     Intended to be run as a job.
     """
 
-    def __init__(self, config: dict, logger: Logger, number_samples=1) -> None:
+    def __init__(self, config: dict, number_samples=1) -> None:
         self.config = config
-        self.logger = logger
+        self.logger = LOGGER
         self.number_samples = number_samples
         self.hostname = mummi_core.get_hostname(contract_hostname=False)
 

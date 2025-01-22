@@ -1,4 +1,6 @@
 import os
+import argparse
+import sys
 import traceback
 
 import mummi_core
@@ -15,7 +17,7 @@ from .runner import MLRunner
 
 def get_parser():
     parser = argparse.ArgumentParser(
-        description="Mummi Operator Machine Learning Job",
+        description="Mummi Operator Machine Learning Runner",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -51,6 +53,12 @@ def get_parser():
         "--mlconfig",
         help="Machine Learning config filename",
         default="mlserver.yaml",
+    )
+    start.add_argument(
+        "--number-samples",
+        help="Number of samples",
+        default=2,
+        type=int,
     )
     start.add_argument(
         "--config-dir",
@@ -97,7 +105,6 @@ def load_mlrunner_config(config_dir, config_file):
     return config
 
 
-# -----------------------------------------------------------------------------
 def main():
     parser = get_parser()
 
@@ -125,18 +132,16 @@ def main():
     mummi_core.init()
     mummi_core.create_root()
 
-    config = load_mlrunner_config(args.config_dir, args.config)
-    mummi_core.init_logger(config=config["config"])
+    config = load_mlrunner_config(args.config_dir, args.mlconfig)
     try:
-        server = MLRunner(config=config, logger=LOGGER, number_samples=args.number_samples)
+        server = MLRunner(config=config, number_samples=args.number_samples)
         server.setup()
         server.run()
     except Exception as e:
-        LOGGER.error(f"> Exiting ML runner due to error ({e})")
+        print(f"> Exiting ML runner due to error ({e})")
         traceback.print_exc()
         exit(1)
 
 
-# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     main()

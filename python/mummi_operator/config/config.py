@@ -3,8 +3,7 @@ import os
 import random
 import shutil
 
-import ensemble.defaults as defaults
-import ensemble.utils as utils
+import mummi_operator.utils as utils
 import jsonschema
 
 from mummi_operator import schema
