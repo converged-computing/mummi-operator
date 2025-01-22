@@ -1,2 +1,2 @@
 default_scheduler = "kubernetes"
-supported_schedulers = [defalt_scheduler]
+supported_schedulers = [default_scheduler]

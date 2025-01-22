@@ -1,8 +1,10 @@
 import importlib
 import os
 import random
+import sys
 import shutil
 
+import mummi_operator.schema as schema
 import mummi_operator.utils as utils
 import jsonschema
 
@@ -21,7 +23,7 @@ def load_workflow_config(config_path, config_dir=None, debug=False):
             cfg["logging"] = {}
         cfg["logging"]["debug"] = True
 
-    jsonschema.validate(cfg, schema=schema.ensemble_config_schema)
+    jsonschema.validate(cfg, schema=schema.mummi_workflow_config_schema)
     return cfg
 
 
