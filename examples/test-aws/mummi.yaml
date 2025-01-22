@@ -6,7 +6,7 @@ spec:
   # registry we can use in-cluster defaults
   mlserver:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlserver
-    # interactive: true
+    interactive: true
 
   rabbitmq:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:rabbitmq
@@ -15,7 +15,9 @@ spec:
   manager:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:wfmanager
     numberMaxSelectedPatchBuffer: 5
-    
+    numberMaxPatchesSelectionsPerIteration: 3
+    interactive: true    
+
   # Jobs for the Mummi workflow manager to submit / orchestrate
   # Right now we use defaults for most things (bundle size, nodes, etc)
   jobs:

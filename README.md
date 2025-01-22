@@ -198,6 +198,7 @@ These are some design decisions I've made (of course open to discussion):
 
 ### Questions
 
+- Question for Loic - with MLServer running on its own, if we start it separately two times, do we sample the same point? E.g., do we need to add randomness or some other state to ensure it doesn't repeat when run as isolated jobs?
 - Can we have some capture of "no change" for an iteration, and not increase the iteration count until there is?
 - Why is the ML server not more tightly controlled as individual jobs?
   - There is a disconnect betweeen using the rabbit data to kick off work vs. always running the ML server first.
