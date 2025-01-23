@@ -19,6 +19,8 @@ from mummi_core.utils.timer import Timer
 
 from kubernetes import config
 
+from mummi_operator.config import load_config
+from mummi_operator.machine import new_mummi_state_machine
 import mummi_ras
 from mummi_ras import Naming
 from mummi_ras.transformations.patch_creator import MacroPatchCreator
@@ -52,8 +54,6 @@ class WorkflowManager:
         self.config = cfg
 
         # Running modes (we only allow kubernetes for now)
-        self.do_workflow = bool(self.wconfig["do_workflow"])
-        self.do_schedulejobs = bool(self.wconfig["do_schedulejobs"])
         self.scheduler = scheduler
         LOGGER.info(f"  Scheduler: [{self.scheduler}]")
 
@@ -82,27 +82,14 @@ class WorkflowManager:
         except:
             config.load_config()
 
-    # def _init_patch_selection(self):
-
-    #     self.pselector = None
-    #     if self.do_patchselection or self.do_feedback_cg2mc:
-    #         ml_config = Naming.ml('macro')
-    #         stype = ml_config['selection']
-    #         assert stype in ['importance', 'random']
-
-    #         wspace = os.path.join(Naming.dir_root('ml'), 'macro')
-    #         self.pselector = self.proxy_manager.PatchSelector(stype, wspace, ml_config)
-    #         self.pselector.restore()
-
     def _init_state_machine(self):
         """
         Create the state machine
         """
-        print('state machine')
-        import IPython
-        IPython.embed()
-        sys.exit()
-        
+        config_dir = self.config["workflow"].get("config_dir")
+        # This is the class that will be instantiated on start()
+        self.state_machine_model = new_mummi_state_machine(self.config)
+
     def _init_cg_selection(self):
         self.cgselector = None
 
@@ -149,7 +136,6 @@ class WorkflowManager:
 
         # ----------------------------------------------------------------------
 
-
     def _init_ml_server(self):
         """
         Initialize the client on the workflow side to talk to the ML Server.
@@ -189,24 +175,6 @@ class WorkflowManager:
             LOGGER.info(f"    > Credentials {credentials_path}")
             LOGGER.info(f"    > Certificate {certificate_path}")
             LOGGER.info(f"    > Routing key {routing_key}")
-
-    # --------------------------------------------------------------------------
-    def checkpoint(self):
-        state = dict(
-            flux=self.flux,
-            iterCounterWF=self.iterCounterWF,
-            iterCounterPC=self.iterCounterPC,
-            patchCounter=self.patchCounter,
-            jobs_createsim=self.job_trackers["createsim"].status(),
-            jobs_backmapping=self.job_trackers["backmapping"].status(),
-            jobs_cg=self.job_trackers["cg"].status(),
-            jobs_aa=self.job_trackers["aa"].status(),
-        )
-
-        # We keep the two last checkpoints
-        self.iointerface.save_checkpoint(
-            self.chkpt, state, use_tstamp=True, cleanup=True, keep_checkpoint=2
-        )
 
     def restore(self):
         print("TODO RESTORE")
@@ -689,19 +657,14 @@ class WorkflowManager:
         # return the dictionaries?
         return started, succeeded, failed
 
-    def __init_machine():
-        """
-        Initialize the state machine
-        """
-        TODO
-
     def start(self):
         """
-        Start the workflow manager
+        Start the workflow manager state machine.
 
         This previously was run_workflow.
         """
-        self._init_machine()
+        self.state_machine = self.state_machine_model()
+
         try:
             # TODO need to sumit mlserver jobs
             # this was previously sent like             selections = self.rpc_client.call({'k_samples': nPatches, 'iteration_id': self.iterCounterMLServer, 'strict': False}), just a number and then get back a simulation ID
@@ -952,20 +915,3 @@ class WorkflowManager:
             LOGGER.info("{} process is exiting due to error flag".format(p.name))
         elif self.is_exit():
             LOGGER.info("{} process is exiting due to exit flag".format(p.name))
-
-
-def load_jobs(config_dir, wfconfig, job_configs):
-    """
-    Load jobs into the workflow manager and ensure configs exist.
-    """
-    # As of Python 3.7, dictionaries are ordered
-    lookup = {}
-    for job_config in job_configs:
-        # This will fail if config is not found
-        job = load_config(config_dir, job_config)
-
-        # The "job_type" is the name (e.g., createsim)
-        lookup[job["job_type"]] = job
-
-    # Add the jobs to the lookup
-    wfconfig["jobs"] = lookup

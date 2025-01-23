@@ -7,12 +7,7 @@ from itertools import count
 from logging import getLogger
 from typing import List
 from enum import Enum
-
-# These are added just for maestro and the custom adapter
-from maestrowf.abstracts.interfaces import SchedulerScriptAdapter
-from maestrowf.interfaces.script import SubmissionRecord
-from mummi_core.workflow.job import SimulationStatus
-from mummi_core.workflow.jobTracker import JobTracker
+from dataclasses import dataclass
 
 LOGGER = getLogger(__name__)
 
@@ -32,47 +27,48 @@ class SubmissionCode(Enum):
     ERROR = 1
     CONFLICT = 2
 
+
 class CancelCode(Enum):
     OK = 0
     ERROR = 1
 
 
-class KubernetesScriptAdapter(SchedulerScriptAdapter):
-    """Interface class for Kubernetes."""
+@dataclass
+class JobSubmission:
+    status: SubmissionCode
+    return_code: int = 0
 
-    key = "kubernetes"
 
-    def __init__(self, **kwargs):
-        """
-        Initialize an instance of the KubernetesScriptAdapter
+def list_jobs(namespace=None):
+    """
+    List jobs. If no namespace is provided, use the current.
+    """
+    namespace = namespace or get_namespace()
+    batch_api = client.BatchV1Api()
+    return batch_api.list_namespaced_job(namespace=namespace)
 
-        This adapter is intended to submit jobs to Kubernetes. Instead
-        of writing scripts we generate yaml CRDs (in code) and submit them.
-        """
-        super(KubernetesScriptAdapter, self).__init__(**kwargs)
 
-        self.add_batch_parameter("nodes", kwargs.pop("nodes", "1"))
-        self._addl_args = kwargs.get("args", {})
+def get_namespace():
+    """
+    Get the current namespace the workflow manager is running in.
+    """
+    ns_path = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+    if os.path.exists(ns_path):
+        with open(ns_path) as f:
+            return f.read().strip()
 
-        # Lookup from integer to actual job name
-        self.job_name_lookup = {}
-        self.job_counter = count(start=1)
-        self.job_lookup = {}
 
-        # Header is only for informational purposes.
-        self._header = {
-            "nodes": "#INFO (nodes) {nodes}",
-            "walltime": "#INFO (walltime) {walltime}",
-            "version": "#INFO (kubernetes adapter version) {version}",
-        }
+class KubernetesJob:
+    """
+    Interface class for Kubernetes.
+    """
+
+    def __init__(self, job_desc):
+        self.job_desc = job_desc
 
     @property
     def namespace(self):
         return self.job_desc.get("namespace") or "default"
-
-    # Only here so it validates super class (abstract) structure
-    def _write_script(self, ws_path, step):
-        pass
 
     def write_script(self, ws_path, step):
         """
@@ -82,6 +78,11 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         """
         # This should come from:
         # https://github.com/LLNL/maestrowf/blob/master/maestrowf/abstracts/interfaces/schedulerscriptadapter.py#L255
+        print("WRITE SCRIPT")
+        import IPython
+
+        IPython.embed()
+        sys.exit()
         to_be_scheduled, cmd, restart = self.get_scheduler_command(step)
 
         # Instead of writing, assemble into components
@@ -132,10 +133,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         """
         List all jobs in the namespace regardless of status, etc.
         """
-        batch_api = client.BatchV1Api()
-        # For now, allow trigger of error (we should not trigger error)
-        # We eventually want to wrap this function with a retry
-        return batch_api.list_namespaced_job(namespace=self.namespace)
+        return list_jobs(self.namespace)
 
     @property
     def queued(self):
@@ -206,9 +204,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         returning a json dump of all metadata for now.
         """
         ntasks = nodes if nodes else self._batch.get("nodes", 1)
-        return json.dumps(
-            {"ntasks": ntasks, "procs": procs, **kwargs, **self._addl_args}
-        )
+        return json.dumps({"ntasks": ntasks, "procs": procs, **kwargs, **self._addl_args})
 
     def create_configmap(self, name, content):
         """
@@ -229,9 +225,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
                     self.delete_configmap(name)
                     return self.create_configmap(name, content)
                 else:
-                    raise ValueError(
-                        f"Unexpected error with configmap creation: {e.reason}"
-                    )
+                    raise ValueError(f"Unexpected error with configmap creation: {e.reason}")
 
     def cleanup(self, name):
         """
@@ -296,12 +290,6 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             )
         return cores_per_task
 
-    def check_jobs(self, joblist):
-        """
-        This only needs to be here because the parent method is abstract.
-        """
-        pass
-
     def get_gpus(self, step):
         """
         Get the number of gpus from the step
@@ -353,10 +341,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
 
         # Raise an exception if ncores is 0
         if ncores <= 0:
-            msg = (
-                "Invalid number of cores specified. "
-                "Aborting. (ncores = {})".format(ncores)
-            )
+            msg = "Invalid number of cores specified. " "Aborting. (ncores = {})".format(ncores)
             LOGGER.error(msg)
             raise ValueError(msg)
 
@@ -438,7 +423,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
 
         # These options are required for the job to fail if the pod fails
         if step.run.get("retry_failure") in true_options:
-            spec.backoffLimit=0
+            spec.backoffLimit = 0
 
         return client.V1Job(
             api_version="batch/v1",
@@ -468,30 +453,22 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         job = self.generate_batch_job(step, configmap_name)
         batch_api = client.BatchV1Api()
 
-        jobid = -1
         retcode = -1
         try:
             result = batch_api.create_namespaced_job(self.namespace, job)
             retcode = 0
-            # Store a lookup from the job counter to sim name here
-            # the job metadata name is the createsim-structure-NNN name
-            # This is only used for cancel, and could be removed
-            jobid = next(self.job_counter)
-            self.job_name_lookup[jobid] = result.metadata.name
             submit_status = SubmissionCode.OK
 
         except Exception as e:
             # This means it was submit twice (should not happen, but let's check)
             if e.reason == "Conflict":
-                LOGGER.warning(
-                    f"Batch job for {step.name} exists, assuming resumed: {e.reason}"
-                )
+                LOGGER.warning(f"Batch job for {step.name} exists, assuming resumed: {e.reason}")
                 submit_status = SubmissionCode.CONFLICT
             else:
                 LOGGER.info(f"There was a create job error: {e.reason}")
                 submit_status = SubmissionCode.ERROR
 
-        return SubmissionRecord(submit_status, retcode, jobid)
+        return JobSubmission(submit_status, retcode)
 
     def cancel_jobs(self, joblist):
         """
@@ -499,9 +476,6 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         but we might have a use case for it. This is the one place where
         we are still relying on the job identifier lookup. We can remove
         it if we don't need it (and just cancel based on the sim name).
-
-        :param joblist: A list of job identifiers to be cancelled.
-        :returns: The return code to indicate if jobs were cancelled.
         """
         # If we don"t have any jobs to check, just return status OK.
         if not joblist:
@@ -516,11 +490,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         # job doesn't seem to have enough information to indicate if it was successful,
         # likely because it's issued and then doesn't confirm deletion (there is a delay)
         # We should look into if there is a parameter like wait or return status.
-        for jobid in joblist:
-            job_name = self.job_name_lookup.get(jobid)
-            if not job_name:
-                LOGGER.warning(f"Unknown jobid {jobid} to cancel, skipping")
-                continue
+        for job_name in joblist:
             try:
                 batch_api.delete_namespaced_job(name=job_name, namespace=self.namespace)
             except Exception as e:
@@ -530,11 +500,6 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             self.delete_configmap(job_name)
 
         return CancelCode.OK
-
-    def _state(self, flux_state):
-        raise NotImplementedError(
-            "KubernetesScriptAdapter does not use the _state mapping."
-        )
 
 
 def convert_walltime_to_seconds(walltime):
@@ -564,62 +529,74 @@ def convert_walltime_to_seconds(walltime):
         return 0
 
     # If we get here, we have an error
-    msg = (
-        f"Walltime value '{walltime}' is not an integer or colon-" f"separated string."
-    )
+    msg = f"Walltime value '{walltime}' is not an integer or colon-" f"separated string."
     LOGGER.error(msg)
     raise ValueError(msg)
 
 
-class KubernetesTracker(JobTracker):
+class KubernetesTracker:
     """Class for a Kubernetes job tracker
 
     The adapter_batch group has arguments for our Kubernetes batch job.
     E.g., working directory, container, environment, etc.
     """
 
-    def __init__(
-        self, job_desc, total_nodes, iointerface, adapter_batch, enable_scheduling=True
-    ):
-        super().__init__(
-            job_desc, total_nodes, iointerface, adapter_batch, enable_scheduling
-        )
+    def __init__(self, job_desc, workflow):
+        self.job_desc = job_desc
+        self.adapter = KubernetesJob(job_desc)
+        self.check_resources()
+
+        # This is the mummi-workflow.yaml with rules for scaling, etc.
+        self.workflow = workflow
 
         # TODO this envrionment variable has the max nodes we will allow to autoscale to
         # We can use this later...
         self.max_nodes_autoscale = (
-            os.environ.get("KUBERNETES_MAX_NODES", total_nodes) or total_nodes
+            os.environ.get("KUBERNETES_MAX_NODES", self.total_nodes) or self.total_nodes
         )
 
-        # This is the portion of nodes calculated by the workflow manager we can use for this
-        # job type. If not set, default to 1.
-        self.max_jobs_total = max(self.max_jobs_total, 1)
+    @property
+    def total_nodes(self):
+        return self.workflow.get("cluster", {}).get("max_nodes") or 1
 
-        # We might eventually need to PR to maestrowlf to add a kubernetes adapter, but for
-        # now are just adding our own here.
-        if enable_scheduling:
-            self.do_scheduling = True
-            adapter_type = adapter_batch.get("type")
-
-            # Create the kubernetes adapter. This is an approach to bypass maestro for now
-            if adapter_type == "kubernetes":
-                self.adapter = KubernetesScriptAdapter(**adapter_batch)
-
-                # There is probably a right way to pass these on, this works for now
-                self.adapter.job_desc = job_desc
-        else:
-            raise ValueError(
-                "The Kubernetes adapter type must be used with the Kubernetes tracker."
-            )
-
-    # --------------------------------------------------------------------------
     def __str__(self):
-        return (
-            f"KubernetesTracker[{self.type}]: "
-            f"#max_jobs = {self.max_jobs_total}, "
-            f"#running = {len(self.running)}, "
-            f"#queued = {len(self.queued)}"
-        )
+        return f"KubernetesTracker[{self.type}]"
+
+    def __repr__(self):
+        return str(self)
+
+    @property
+    def config(self):
+        return self.job_desc["config"]
+
+    @property
+    def type(self):
+        return self.job_desc["job_type"]
+
+    @property
+    def nnodes(self):
+        return int(self.config.get("nnodes", 1))
+
+    @property
+    def nprocs(self):
+        return int(self.config.get("nprocs", 1))
+
+    @property
+    def ncores(self):
+        return int(self.config.get("cores per task", 1))
+
+    @property
+    def ngpus(self):
+        return int(self.config.get("ngpus", 0))
+
+    def check_resources(self):
+        """
+        Sanity check resources are reasonable. Har har har.
+        """
+        assert self.nnodes >= 1
+        assert self.nprocs >= 1
+        assert self.ncores >= 1
+        assert self.ngpus >= 0
 
     @property
     def name(self):
@@ -675,13 +652,9 @@ class KubernetesTracker(JobTracker):
             sims_unknown.append(job.metadata.name)
 
         # Total is all jobs minus unknown
-        total = (
-            len(sims_queued) + len(sims_continue) + len(sims_success) + len(sims_failed)
-        )
+        total = len(sims_queued) + len(sims_continue) + len(sims_success) + len(sims_failed)
         if sims_unknown:
-            LOGGER.warning(
-                f"Simulations with unknwon status need investigation: {sims_unknown}"
-            )
+            LOGGER.warning(f"Simulations with unknwon status need investigation: {sims_unknown}")
 
         jobs = {
             "success": sims_success,
@@ -698,10 +671,7 @@ class KubernetesTracker(JobTracker):
         # Add the total, no matter what the jobid
         updated["total"] = total
         updated["all"] = (
-            updated["success"]
-            + updated["failed"]
-            + updated["queued"]
-            + updated["continue"]
+            updated["success"] + updated["failed"] + updated["queued"] + updated["continue"]
         )
         return updated
 
@@ -756,6 +726,11 @@ class KubernetesTracker(JobTracker):
         Returns:
             bool:       to indicate if the submit was successful/done or not
         """
+        print("BEFORE WRITE SCRIPT")
+        import IPython
+
+        IPython.embed()
+        sys.exit()
         # Note that this doesn't actually write the script to the filesystem
         cmd_script, step = self.write_script(sim_name)
         LOGGER.debug(f"[{self.type}] submitting script {sim_name} {cmd_script}")
@@ -789,9 +764,7 @@ class KubernetesTracker(JobTracker):
     # MuMMI Workflow functionality
     # --------------------------------------------------------------------------
     @staticmethod
-    def check_sim_status(
-        iointerface, job_type, dir_sim, sim_names
-    ) -> List[SimulationStatus]:
+    def check_sim_status(iointerface, job_type, dir_sim, sim_names):
         """
         Check the status of a simulation using success flags.
         This previously relied on filesystem indicators. We

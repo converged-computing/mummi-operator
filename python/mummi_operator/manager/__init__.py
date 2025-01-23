@@ -59,11 +59,10 @@ def get_parser():
         help="Scheduler to use (defaults to Kubernetes)",
         choices=defaults.supported_schedulers,
         default="kubernetes",
-    ) 
+    )
     start.add_argument(
         "config",
         help="Workflow config (required)",
-        required=True,
     )
     start.add_argument(
         "--config-dir",
@@ -97,14 +96,13 @@ def main():
     # retrieve subparser (with help) from parser
     helper = get_subparser_helper(args, parser)
 
-    # Load workflow manager and patch creator config (I don't think being used)
-    # TODO: eventually patch creator config might be decoupled
+    # Load workflow manager config
     wfconfig = load_config(args.config_dir, args.manager_config)
     print(wfconfig)
 
     # This is the workflow config that defines files for jobs
-    workflow = load_workflow_config(args.config, args.config_dir)
-    wfconfig['workflow'] = workflow
+    workflow = load_workflow_config(args.config, args.config_dir, debug=args.debug)
+    wfconfig["workflow"] = workflow
 
     # Setup the logger
     setup_logger(quiet=args.quiet, debug=args.debug)
@@ -113,9 +111,13 @@ def main():
     print(f"> Launching workflow manager on ({platform.node()})")
     manager = WorkflowManager(wfconfig, scheduler=args.scheduler)
 
+    # Placed outside for now to throw error
+    manager.start()
+
     # start the manager
     try:
-        manager.start()
+        pass
+        # manager.start()
     except Exception as e:
         LOGGER.error(f"Exiting due to error ({e})")
         traceback.print_exc()
