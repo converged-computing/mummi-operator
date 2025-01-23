@@ -405,7 +405,7 @@ class KubernetesJob:
         template = {
             "metadata": {
                 "labels": {
-                    "app": self.job_desc["job_type"],
+                    "app": self.job_desc["name"],
                 },
             },
             "spec": {
@@ -541,13 +541,13 @@ class KubernetesTracker:
     E.g., working directory, container, environment, etc.
     """
 
-    def __init__(self, job_desc, workflow):
-        self.job_desc = job_desc
-        self.adapter = KubernetesJob(job_desc)
-        self.check_resources()
+    def __init__(self, job_name, workflow):
+        self.job_desc = workflow.get_job(job_name)
+        self.adapter = KubernetesJob(self.job_desc)
 
         # This is the mummi-workflow.yaml with rules for scaling, etc.
         self.workflow = workflow
+        self.check_resources()
 
         # TODO this envrionment variable has the max nodes we will allow to autoscale to
         # We can use this later...
@@ -571,7 +571,7 @@ class KubernetesTracker:
 
     @property
     def type(self):
-        return self.job_desc["job_type"]
+        return self.job_desc["name"]
 
     @property
     def nnodes(self):
@@ -603,7 +603,7 @@ class KubernetesTracker:
         """
         Get the job description name
         """
-        return self.job_desc["job_type"]
+        return self.job_desc["name"]
 
     def list_jobs_by_status(self, convert_jobid=True):
         """

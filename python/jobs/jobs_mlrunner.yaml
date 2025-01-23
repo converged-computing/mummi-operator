@@ -1,0 +1,74 @@
+name: mlrunner
+
+# This file describes the options that can be used for the MuMMI ML server
+# TODO vsoch: clean this out
+config:
+  nnodes:     1
+  ngpus:      1
+  log_mem_usage: 0       # 0 deactivate the memory logging (logging memory is slow)
+  loglevel:      2       # When stable, change to 2 (debug is 1)
+  logpath:       ''      # empty logpath will use ROOT/workspace
+  logfile:       0       # whether to write log to file (0 false, 1 true)
+  logstdout:     1       # whether to write log to stdout
+  mini_mummi:    true    # Run with mini MuMMI settings
+  flux: false            # disable flux
+  use_oras: true         # push valid artifacts to an oras registry
+
+# E.g., oras push <host>/<uri>:<sample> --plain-http .
+oras:
+  host: registry-0.mini-mummi.default.svc.cluster.local:5000
+  plain_http: true
+  tls_verify: false
+
+workspace:
+  path:
+    eval: mummi_ras.Naming.dir_root('mlserver')
+
+# Auto-encoder (ML model) parameters
+encoder:
+  path: /opt/clones/mummi_resources/ml
+  model: "chonky-model"  
+  cg_positions: "CG_pos_data_summary_pos_dis_C1_v1.npz"
+
+sampler:
+  interpolator: "ot_feedback" # Type of sampler used. Can be "naive", "ot" or "ot_feedback"
+   # Pickle file of pre-computed interpolator (will override most settings here if chosen)
+  pre_computed: ""
+  outpath:
+    eval: mummi_ras.Naming.dir_root('ml')
+  feedback:
+    do_feedback: true
+    database: "db-feedback-sampling.npz" # The feedback database used for sampling (createsims status and validation)
+    frame_database: "db-feedback-frames.npz" # The feedback database used for sampling  (feedback frames from cganalysis)
+  # This factor defines the number of extra structures we will generate
+  # Example: if =2, we will select <= 2 * nMaxSelectedPatchBuffer structures
+  # It is useful when many createsims are failing and we need to generate more
+  factor_extra_structures: 2
+  # Number of neighbors (used to calculate the k nearest neighbors)
+  kneighbors: 10
+  # Define lower bound for paramter lambda that will define how far from training data we are sampling
+  lambda_lowerbound: 0
+  # Define upper bound for parameter lambda
+  lambda_upperbound: 1
+  # Define the number of iterations used by the optimal transport package
+  num_iter_max: 1000000
+  # This parameter defines the fraction of A and B that will actually be used (0.1 = 10%)
+  # This was 0.3 before, needs to be > 0.5 and less than 1 (original was 1.0)
+  sub_sample_frac: 0.051
+
+generator:
+  outpath:
+    eval: mummi_ras.Naming.dir_root('ml')
+
+validator:
+  healing: true # perform healing on the validated structures
+  cleanup: true # Remove all the temporary files generated during validations
+  outpath:
+    eval: mummi_ras.Naming.dir_root('ml')
+  # Name of the folder in the mummi_resources to pull out
+  # For Pre-campaign 3
+  ## resources: "ml-validator"
+  ## complex: "RAS-RAF_state_ma_0.gro"
+  # For Campaign 1
+  resources: "martini3-validator"
+  complex: "ras-rbdcrd-ref-CG.gro"

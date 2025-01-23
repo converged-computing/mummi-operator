@@ -1,0 +1,8 @@
+# mummi-workflow.yaml
+cluster:
+  max_size: 6
+  autoscale: False
+jobs:
+  - config: jobs_mlrunner.yaml
+  - config: jobs_createsim.yaml
+  - config: jobs_cganalysis.yaml

@@ -30,6 +30,25 @@ jobs:
     config: jobs_cganalysis.yaml
 ```
 
+## Containers
+
+A different design decision is packaging jobs as modular containers ([docker](docker)), which are defined for the workflow manager in [jobs](jobs). We build them from this context to add in the mummi-operator code.
+
+```bash
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 633731392008.dkr.ecr.us-east-1.amazonaws.com
+docker build -f docker/mlrunner/Dockerfile -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner .
+docker build -f docker/wfmanager/Dockerfile -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager .
+```
+
+```bash
+kind create cluster --config ../examples/kind-config.yaml
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager
+kubectl apply -f 
+kubectl apply -f wfmanager-deployment.yaml
+```
+
+This has an added oras client (in Python) for pushing artifacts.
+
 🚧 Under Construction! 🚧
 
 ## License

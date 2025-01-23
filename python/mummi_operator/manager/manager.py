@@ -86,9 +86,8 @@ class WorkflowManager:
         """
         Create the state machine
         """
-        config_dir = self.config["workflow"].get("config_dir")
         # This is the class that will be instantiated on start()
-        self.state_machine_model = new_mummi_state_machine(self.config)
+        self.state_machine_model = new_mummi_state_machine(self.config['workflow'])
 
     def _init_cg_selection(self):
         self.cgselector = None

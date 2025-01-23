@@ -65,9 +65,18 @@ class WorkflowConfig:
         """
         Load the main workflow config
         """
+        # If no config path provided, assume alongside jobs
+        if config_dir is None:
+            config_dir = os.path.dirname(config_path)
         self.filename = find_config(config_dir, config_path)
-        self.cfg = read_yaml(self.filename)
-        self.config_dir = config_dir or self.cfg.get("config_dir")
+        self.cfg = utils.read_yaml(self.filename)
+        self.config_dir = config_dir
+
+    def get(self, name, default=None):
+        return self.cfg.get(name, default)
+
+    def get_job(self, name):
+        return self.jobs.get(name)
 
     def load_jobs(self):
         """
@@ -77,7 +86,7 @@ class WorkflowConfig:
             raise ValueError("Workflow is missing job configs.")
 
         # As of Python 3.7, dictionaries are ordered
-        for job_config in self.cfg["jobs"]:
+        for job_config in self.cfg['jobs']:
             # This will fail if config is not found
             job = load_config(self.config_dir, job_config["config"])
 

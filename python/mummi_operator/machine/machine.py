@@ -4,6 +4,7 @@ from statemachine import State, StateMachine
 from statemachine.factory import StateMachineMetaclass
 from statemachine.utils import run_async_from_sync
 import mummi_operator.tracker as tracker
+import math
 
 
 def create_mummi_state_machine(definition: dict, **extra_kwargs):
@@ -63,13 +64,25 @@ def on_enter_start(self):
 
     IPython.embed()
 
-    # Pack the max number of "next step" into max size
+    # Simple algorithm to start:
+    # 1. Pack the max number of "next step" (first step) into max size
     # This will use the namespace the workflow manager is running in
     jobs = tracker.list_jobs()
 
+    # 2. TODO account for pending / running jobs here...
+    # This assumes the max size set by the user accounts for other stuff in cluster
+    # If we underestimate, we will just have pending jobs
+    
     # TODO need to account for GPU / not GPU, right now we consider just nodes
-    nodes_needed = next_step_config.get("nnodes", 1)
-
+    next_step = self.next_step_config('start')
+    nodes_needed = next_step.get('nnodes', 1)
+    
+    # pack max into available
+    # TODO there are THREE places to get the name now, need to consolidate
+    submit_n = math.floor(self.workflow.max_size / nodes_needed)
+    for i in range(submit_n):
+        self.send(next_step['jobname'])
+    
 
 def init_trackers(self):
     """
@@ -80,7 +93,7 @@ def init_trackers(self):
         if state_name in ["start", "complete"]:
             continue
         self.trackers[state_name] = tracker.KubernetesTracker(
-            self.config[state_name], self.workflow
+            state_name, self.workflow
         )
 
 
@@ -120,14 +133,14 @@ def is_complete(self, job_name, count) -> bool:
     #    print(f"After '{event}', on the '{state.id}' state.")
 
 
-def new_mummi_state_machine(jobs, workflow_config):
+def new_mummi_state_machine(config):
     """
     New mummi state machine creates a new Mummi Workflow state machine.
     """
     states = {"start": {"initial": True, "final": False}}
     events = {"change": []}
     last = None
-    for i, job in enumerate(jobs):
+    for i, job in enumerate(config.jobs):
         states[job] = {"initial": False, "final": False}
         if i != 0:
             # events[f"{last}_finish"] = [{"from": last, "to": job}]
@@ -138,7 +151,6 @@ def new_mummi_state_machine(jobs, workflow_config):
 
     # Add last state (completed) and transition to it
     states["complete"] = {"initial": False, "final": True}
-    # events[f"{last}_finish"] = [{"from": last, "to": "complete"}]
     events["change"].append({"from": last, "to": "complete"})
     return create_mummi_state_machine(
         {
@@ -149,10 +161,8 @@ def new_mummi_state_machine(jobs, workflow_config):
         on_change=on_change,
         on_enter_start=on_enter_start,
         init_trackers=init_trackers,
-        workflow=workflow_config,
-        get_next_step=get_next_step,
-        get_next_step_config=get_next_step_config,
-        config=jobs,
+        workflow=config,
+        next_step_config=next_step_config,
     )
 
 
