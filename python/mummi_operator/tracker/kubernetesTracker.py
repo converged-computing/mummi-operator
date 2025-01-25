@@ -6,8 +6,14 @@ import os
 from itertools import count
 from logging import getLogger
 from typing import List
-from enum import Enum
-from dataclasses import dataclass
+
+from jinja2 import Template
+
+import mummi_operator.defaults as defaults
+
+from .state import failed_jobs, list_jobs, queued_jobs, running_jobs
+from .types import CancelCode, JobSetup, JobSubmission, SubmissionCode, true_options
+from .utils import convert_walltime_to_seconds
 
 LOGGER = getLogger(__name__)
 
@@ -15,47 +21,6 @@ from kubernetes import client, config
 
 # This assumes the wfmanager running inside the cluster
 config.load_incluster_config()
-
-# This would assume external to it
-# config.load_kube_config()
-true_options = ["true", True, "1", 1]
-
-
-# We need to handle conflict
-class SubmissionCode(Enum):
-    OK = 0
-    ERROR = 1
-    CONFLICT = 2
-
-
-class CancelCode(Enum):
-    OK = 0
-    ERROR = 1
-
-
-@dataclass
-class JobSubmission:
-    status: SubmissionCode
-    return_code: int = 0
-
-
-def list_jobs(namespace=None):
-    """
-    List jobs. If no namespace is provided, use the current.
-    """
-    namespace = namespace or get_namespace()
-    batch_api = client.BatchV1Api()
-    return batch_api.list_namespaced_job(namespace=namespace)
-
-
-def get_namespace():
-    """
-    Get the current namespace the workflow manager is running in.
-    """
-    ns_path = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-    if os.path.exists(ns_path):
-        with open(ns_path) as f:
-            return f.read().strip()
 
 
 class KubernetesJob:
@@ -70,151 +35,22 @@ class KubernetesJob:
     def namespace(self):
         return self.job_desc.get("namespace") or "default"
 
-    def write_script(self, ws_path, step):
-        """
-        Generate the script for the Kubernetes job.
-        This is combined from write_script (from the super class) and _write_script
-        (prototype from the flux script class) but without writing anything to file.
-        """
-        # This should come from:
-        # https://github.com/LLNL/maestrowf/blob/master/maestrowf/abstracts/interfaces/schedulerscriptadapter.py#L255
-        print("WRITE SCRIPT")
-        import IPython
-
-        IPython.embed()
-        sys.exit()
-        to_be_scheduled, cmd, restart = self.get_scheduler_command(step)
-
-        # Instead of writing, assemble into components
-        fname = "{}.{}".format(step.name, self._extension)
-        script_path = os.path.join(ws_path, fname)
-        components = {
-            "filename": fname,
-            "path": script_path,
-            "headers": self.get_header(step),
-            "command": cmd,
-            "restart": False,
-        }
-
-        # How would a restart happen in an ephemeral job?
-        restart_path = None
-        if restart:
-            rname = "{}.restart.{}".format(step.name, self._extension)
-            restart_path = os.path.join(ws_path, rname)
-            cmd = "\n\n{}\n".format(restart)
-            components.update(
-                {"restart": True, "restart_path": restart_path, "restart_command": cmd}
-            )
-
-        LOGGER.debug(
-            "---------------------------------\n"
-            "Script path:   %s\n"
-            "Restart path:  %s\n"
-            "Scheduled?:    %s\n"
-            "---------------------------------\n",
-            script_path,
-            restart_path,
-            to_be_scheduled,
-        )
-        return components
-
     @property
-    def _extension(self):
-        return "kubernetes-job.sh"
-
-    @property
-    def extension(self):
-        return self._extension
-
-    def nqueued_sims(self):
-        return len(self.queued)
-
-    def list_jobs(self):
-        """
-        List all jobs in the namespace regardless of status, etc.
-        """
-        return list_jobs(self.namespace)
-
-    @property
-    def queued(self):
-        """
-        List jobs that are queued (not running). This overrides the manual self.queued.
-        """
-        jobs = self.list_jobs()
-        return [
-            x.metadata.name
-            for x in jobs.items
-            if x.status.completion_time is None and x.status.active == 0
-        ]
-
-    @queued.setter
-    def queued(self, value):
-        pass
-
-    @property
-    def running(self):
-        """
-        List jobs that are running. This overrides the manual self.queued.
-        """
-        jobs = self.list_jobs()
-        return [
-            x.metadata.name
-            for x in jobs.items
-            if x.status.completion_time is None and x.status.active == 1
-        ]
-
-    @running.setter
-    def running(self, value):
-        pass
-
-    def nrunning_jobs(self):
-        return len(self.running)
-
-    def get_header(self, step):
-        """
-        Generate the header that is mostly for informational purposes.
-
-        :param step: A StudyStep instance.
-        :returns: A string of the header based on internal batch parameters and
-                  the parameter step.
-        """
-        run = dict(step.run)
-
-        batch_header = dict(self._batch)
-        walltime = step.run.get("walltime", None)
-        batch_header["walltime"] = convert_walltime_to_seconds(walltime)
-
-        if run["nodes"]:
-            batch_header["nodes"] = run.pop("nodes")
-        batch_header["job-name"] = step.name.replace(" ", "_")
-        batch_header["comment"] = step.description.replace("\n", " ")
-
-        modified_header = ["#!{}".format(self._exec)]
-        for key, value in self._header.items():
-            if key not in batch_header:
-                continue
-            modified_header.append(value.format(**batch_header))
-
-        return "\n".join(modified_header)
-
-    def get_parallelize_command(self, procs, nodes=None, **kwargs):
-        """
-        Generate parallelization metadata for kubernetes. This would previously
-        return a string command, but we don't want that for kubernetes. I am
-        returning a json dump of all metadata for now.
-        """
-        ntasks = nodes if nodes else self._batch.get("nodes", 1)
-        return json.dumps({"ntasks": ntasks, "procs": procs, **kwargs, **self._addl_args})
+    def config(self):
+        return self.job_desc["config"]
 
     def create_configmap(self, name, content):
         """
         Create a ConfigMap (jobscript) for Kubernetes
+
+        This includes the entrypoint, along with the entire
+        script (config) that is provided for the app to use.
         """
         cm = client.V1ConfigMap(
             api_version="v1",
             kind="ConfigMap",
             metadata=client.V1ObjectMeta(name=name, namespace=self.namespace),
-            data={"entrypoint": content},
+            data={"entrypoint": content, "config": json.dumps(self.job_desc, indent=4)},
         )
         with client.ApiClient() as api_client:
             api = client.CoreV1Api(api_client)
@@ -259,50 +95,6 @@ class KubernetesJob:
             except Exception as e:
                 LOGGER.warning(f"Issue deleting configmap {name}: {e}")
 
-    def set_default_int(self, value, default):
-        """
-        Given a value, ensure it is set or use a default
-        """
-        if not isinstance(value, int):
-            if not value:
-                value = default
-            else:
-                value = int(value)
-        return value
-
-    def get_cores_per_task(self, step):
-        """
-        Helper function to get cores per task from a step.
-        """
-        cores_per_task = step.run.get("cores per task", None)
-        if isinstance(cores_per_task, str):
-            try:
-                cores_per_task = int(cores_per_task)
-            except:
-                cores_per_task = 1
-        if not cores_per_task:
-            cores_per_task = 1  # max((1, ceil(processors / nodes)))
-
-            LOGGER.warning(
-                "'cores per task' set to a non-value. Populating with a "
-                "sensible default. (cores per task = %d",
-                cores_per_task,
-            )
-        return cores_per_task
-
-    def get_gpus(self, step):
-        """
-        Get the number of gpus from the step
-        """
-        try:
-            ngpus = step.run.get("gpus", "0")
-            ngpus = int(ngpus) if ngpus else 0
-        except ValueError as val_error:
-            msg = f"Specified gpus '{ngpus}' is not a decimal value."
-            LOGGER.error(msg)
-            raise val_error
-        return ngpus
-
     @property
     def extra_environment(self):
         """
@@ -314,30 +106,16 @@ class KubernetesJob:
             environ.append({"name": key, "value": value})
         return environ
 
-    def generate_batch_job(self, step, configmap_name):
+    def generate_batch_job(self, step, configmap_name, jobid):
         """
         Generate the job CRD assuming the config map entrypoitn.
         """
-        nodes = step.run.get("nodes", 1)
-        nodes = self.set_default_int(nodes, 1)
-
-        processors = step.run.get("procs", 0)
-        processors = self.set_default_int(processors, 1)
-        walltime = convert_walltime_to_seconds(step.run.get("walltime", 0))
+        walltime = convert_walltime_to_seconds(step.walltime or 0)
         metadata = client.V1ObjectMeta(name=configmap_name)
-
-        # Get variables from job description
-        image = self.job_desc.get("image")
-        if not image:
-            raise ValueError("A container image is required for the Kubernetes job.")
 
         # Command should just execute entrypoint - keep it simple for now
         command = ["/bin/bash", "/workdir/entrypoint.sh"]
-
-        # Compute cores per task, ngpus, and total ncores
-        cores_per_task = self.get_cores_per_task(step)
-        ngpus = self.get_gpus(step)
-        ncores = cores_per_task * nodes
+        ncores = (step.cores_per_task or 1) * step.nodes
 
         # Raise an exception if ncores is 0
         if ncores <= 0:
@@ -347,26 +125,24 @@ class KubernetesJob:
 
         # Job resources, we care about cores and GPU
         # Note that this is PER container, not across entire job
-        # I also don't see memory in the step.run
-        # I do see nodes, procs, gpus, cores per task
-        resources = {"cpu": cores_per_task}
+        # We could add memory here if needed
+        resources = {"cpu": step.cores_per_task}
 
         # Assume for now nvidia, this can be changed
-        if ngpus > 0:
-            gpu_label = step.run.get("gpulabel", "nvidia.com/gpu")
-            resources[gpu_label] = ngpus
+        if step.gpus > 0:
+            gpu_label = self.config.get("gpulabel", "nvidia.com/gpu")
+            resources[gpu_label] = step.gpus
 
         # Wrap as requests and limits
         resources = {"requests": resources, "limits": resources}
 
         # Container image pull policy
-        pull_policy = step.run.get("pull_policy", "IfNotPresent")
+        pull_policy = self.config.get("pull_policy", "IfNotPresent")
         print(f"Pull policy for {configmap_name} is {pull_policy}")
 
         # Job container to run the script
-        # Do not define working directory assuming container is built with correct one
         container = client.V1Container(
-            image=image,
+            image=self.job_desc["image"],
             name=configmap_name,
             command=[command[0]],
             args=command[1:],
@@ -382,7 +158,7 @@ class KubernetesJob:
         )
 
         # Only add walltime if it's > 0 and not None
-        if walltime:
+        if step.walltime:
             container.active_deadline_seconds = int(walltime)
 
         # Prepare volumes (with config map)
@@ -395,7 +171,11 @@ class KubernetesJob:
                         client.V1KeyToPath(
                             key="entrypoint",
                             path="entrypoint.sh",
-                        )
+                        ),
+                        client.V1KeyToPath(
+                            key="config",
+                            path="app-config.json",
+                        ),
                     ],
                 ),
             ),
@@ -406,6 +186,7 @@ class KubernetesJob:
             "metadata": {
                 "labels": {
                     "app": self.job_desc["name"],
+                    defaults.operator_label: jobid,
                 },
             },
             "spec": {
@@ -418,11 +199,11 @@ class KubernetesJob:
 
         # Do we want the job to terminate after failure?
         spec = client.V1JobSpec(
-            parallelism=nodes, completions=nodes, suspend=False, template=template
+            parallelism=step.nodes, completions=step.nodes, suspend=False, template=template
         )
 
         # These options are required for the job to fail if the pod fails
-        if step.run.get("retry_failure") in true_options:
+        if self.config.get("retry_failure") in true_options:
             spec.backoffLimit = 0
 
         return client.V1Job(
@@ -432,25 +213,18 @@ class KubernetesJob:
             spec=spec,
         )
 
-    def submit(self, step, path, cwd, job_map=None, env=None):
+    def submit(self, step, jobid):
         """
-        Submit a script to the Flux scheduler.
+        Submit a job to Kubernetes
 
-        :param step: The StudyStep instance this submission is based on.
-        :param path: Local path to the script to be executed.
-        :param cwd: Path to the current working directory.
-        :param job_map: A dictionary mapping step names to their job
-                        identifiers.
-        :param env: A dict containing a modified environment for execution.
-        :returns: The return status of the submission command and job
-                  identiifer.
+        :param step: The JobSetup data.
         """
         # Create a config map (mounted read only script to run sim)
         configmap_name = step.name.lower().replace("_", "-")
-        self.create_configmap(configmap_name, step.run["cmd"])
+        self.create_configmap(configmap_name, step.script)
 
         # Generate the kubernetes batch job!
-        job = self.generate_batch_job(step, configmap_name)
+        job = self.generate_batch_job(step, configmap_name, jobid)
         batch_api = client.BatchV1Api()
 
         retcode = -1
@@ -502,40 +276,9 @@ class KubernetesJob:
         return CancelCode.OK
 
 
-def convert_walltime_to_seconds(walltime):
-    """
-    This is from flux and the function could be shared
-    """
-    # An integer or float was provided
-    if isinstance(walltime, int) or isinstance(walltime, float):
-        LOGGER.debug("Encountered numeric walltime = %s", str(walltime))
-        return int(float(walltime) * 60.0)
-
-    # A string was provided that will convert to numeric
-    elif isinstance(walltime, str) and walltime.isnumeric():
-        LOGGER.debug("Encountered numeric walltime = %s", str(walltime))
-        return int(float(walltime) * 60.0)
-
-    # A string was provided that needs to be parsed
-    elif ":" in walltime:
-        LOGGER.debug("Converting %s to seconds...", walltime)
-        seconds = 0.0
-        for i, value in enumerate(walltime.split(":")[::-1]):
-            seconds += float(value) * (60.0**i)
-        return seconds
-
-    # Don't set a wall time
-    elif not walltime or (isinstance(walltime, str) and walltime == "inf"):
-        return 0
-
-    # If we get here, we have an error
-    msg = f"Walltime value '{walltime}' is not an integer or colon-" f"separated string."
-    LOGGER.error(msg)
-    raise ValueError(msg)
-
-
 class KubernetesTracker:
-    """Class for a Kubernetes job tracker
+    """
+    Kubernetes single job tracker.
 
     The adapter_batch group has arguments for our Kubernetes batch job.
     E.g., working directory, container, environment, etc.
@@ -605,322 +348,49 @@ class KubernetesTracker:
         """
         return self.job_desc["name"]
 
-    def list_jobs_by_status(self, convert_jobid=True):
+    def submit_job(self, jobid):
         """
-        Return a lookup of jobs by status
-
-        :param convert_jobid: If True, convert jobid back to original simid
-        :returns: Dictionary with job lists and total count
+        Submit a job to Kubernetes.
         """
-        jobs = self.adapter.list_jobs()
-
-        # The above is all jobs, across types (createsim and cg)
-        # We need to filter down to those where app matches the job type
-        jobs = [x for x in jobs.items if x.metadata.labels.get("app") == self.name]
-
-        # These are the lists we will populate.
-        # I think there was a difference between sims and jobs, but this
-        # model in Kubernetes has one simulation == one job, so I'm reducing
-        sims_success = []  # simulations that have finished successfully
-        sims_failed = []  # simulations that have failed
-        sims_continue = []  # simulations that need to be continued (running)
-        sims_queued = []  # simulations that are queued
-        sims_unknown = []  # simulations with unknown (need investigation)
-
-        for job in jobs:
-            # Success means we finished with succeeded condition
-            if job.status.succeeded == 1 and job.status.completion_time is not None:
-                sims_success.append(job.metadata.name)
-                continue
-
-            # Failure means we finished with failed condition
-            if job.status.failed == 1 and job.status.completion_time is not None:
-                sims_failed.append(job.metadata.name)
-                continue
-
-            # Not active, and not finished is queued
-            if not job.status.active and not job.status.completion_time:
-                sims_queued.append(job.metadata.name)
-                continue
-
-            # Active, and not finished is running
-            if job.status.active == 1 and not job.status.completion_time:
-                sims_continue.append(job.metadata.name)
-                continue
-
-            # If it didn't fail or succeed, let it keep going to timeout (duration/walltime)
-            sims_unknown.append(job.metadata.name)
-
-        # Total is all jobs minus unknown
-        total = len(sims_queued) + len(sims_continue) + len(sims_success) + len(sims_failed)
-        if sims_unknown:
-            LOGGER.warning(f"Simulations with unknwon status need investigation: {sims_unknown}")
-
-        jobs = {
-            "success": sims_success,
-            "failed": sims_failed,
-            "queued": sims_queued,
-            "continue": sims_continue,
-            "unknown": sims_unknown,
-        }
-        updated = jobs
-        if convert_jobid:
-            for state, joblist in jobs.items():
-                updated[state] = [self.jobid_to_sim(x) for x in joblist]
-
-        # Add the total, no matter what the jobid
-        updated["total"] = total
-        updated["all"] = (
-            updated["success"] + updated["failed"] + updated["queued"] + updated["continue"]
-        )
-        return updated
-
-    def jobid_to_sim(self, jobid):
-        """
-        Convert a jobid in Kubernetes back to the sim id. E.g.,
-
-        createsim-structure-iter00-000000001801-6xmgq -> structure_iter00_000000001801_6xmgq
-        """
-        return jobid.replace(f"{self.type}-", "").replace("-", "_")
-
-    @property
-    def queued(self):
-        """
-        Queued is dynamic - the number of jobs of the type that are in queue.
-        These are in queue but not running. Note this over-rides a variable
-        that was being manually stored. If it's not submit to the queue, it
-        does not exist as a queued job!
-        """
-        return self.adapter.queued
-
-    @queued.setter
-    def queued(self, value):
-        """
-        Allow parent class JobTracker to faux "set" the property so we don't need
-        to edit mummi-core. This only happens on init, trying to set to empty list.
-        """
-        pass
-
-    @property
-    def running(self):
-        """
-        List jobs that are running. This overrides the manual self.queued.
-        """
-        return self.adapter.running
-
-    @running.setter
-    def running(self, value):
-        pass
-
-    @property
-    def running_sims(self):
-        """
-        Return running sims as determed by Kubernetes script adapter
-        """
-        return self.adapter.running
-
-    def submit_job(self, sim_name):
-        """
-        Submit a job using the adapter.
-
-        Returns:
-            bool:       to indicate if the submit was successful/done or not
-        """
-        print("BEFORE WRITE SCRIPT")
-        import IPython
-
-        IPython.embed()
-        sys.exit()
-        # Note that this doesn't actually write the script to the filesystem
-        cmd_script, step = self.write_script(sim_name)
-        LOGGER.debug(f"[{self.type}] submitting script {sim_name} {cmd_script}")
-
-        # submit cmd_script to adapter and append (jobid, simname) to queue
-        submit_record = self.adapter.submit(step, cmd_script, self.workspace)
+        step = self.create_step(jobid)
+        LOGGER.debug(f"[{self.type}] submitting job {jobid}")
+        submit_record = self.adapter.submit(step, jobid)
 
         # A conflcit means the job is already running. We don't want to count
         # it as a new submit (it will already be represented in the state)
-        if submit_record.submission_code == SubmissionCode.CONFLICT:
+        if submit_record.status == SubmissionCode.CONFLICT:
             LOGGER.error(
                 f"[{self.type}] Found already running {self.type} job (Conflict) for simname = {sim_name}"
             )
-            return False
 
         # Allow it to fail and attempt cleanup
-        elif not submit_record or submit_record.submission_code != SubmissionCode.OK:
+        elif not submit_record or submit_record.status != SubmissionCode.OK:
             LOGGER.error(
                 f"[{self.type}] Failed to submit a {self.type} job for simname = {sim_name}"
             )
             self.adapter.cleanup(step.name)
-            return False
 
-        # We don't need to save the jobid to running here - we can get
-        # them dynamically, and the jobid is stored with the adapter.
-        job_id = submit_record.job_identifier
-        LOGGER.debug(f"[{self.type}] Started job {job_id} for {sim_name}")
-        return True
+        else:
+            LOGGER.debug(f"[{self.type}] Started job {jobid}")
+        return submit_record
 
-    # --------------------------------------------------------------------------
-    # MuMMI Workflow functionality
-    # --------------------------------------------------------------------------
-    @staticmethod
-    def check_sim_status(iointerface, job_type, dir_sim, sim_names):
+    def create_step(self, jobid):
         """
-        Check the status of a simulation using success flags.
-        This previously relied on filesystem indicators. We
-        ask the Kubernetes API directly, but keep the same interface
-        so it doesn't break something unexpectedly.
+        Create job parameters for a Kubernetes Job CRD
         """
-        raise ValueError("Check sim status should not be called.")
-
-    def status(self):
-        """
-        Return status for the workflow manager.
-        """
-        running = self.running
-        return {
-            "type": self.type,
-            "jobCnt": self.jobCnt,
-            "nqueued": len(self.queued),
-            "nrunning": len(running),
-            "queued": self.queued,
-            "running": running,
-        }
-
-    def restore(self, state, check_for_running_jobs):
-        """Check status of all running jobs, and return list of success and
-        failure for the next step. This does not need to update the queue.
-
-        Returns:
-            sims_success = []:      simulations that have finished successfully
-            sims_failed = []:       simulations that have failed
-        """
-        assert self.type == state["type"]
-        jobs = self.list_jobs_by_status()
-        self.jobCnt = jobs["total"]
-        nrunning = len(jobs["continue"])
-        nqueued = len(jobs["queued"])
-
-        LOGGER.info(
-            f"[{self.type}] Restoring KubernetesTracker: running = {nrunning} jobs, queued = {nqueued} sims"
+        LOGGER.debug(f"[{self.type}] jobid = {jobid}")
+        step = JobSetup(
+            name=jobid,
+            nodes=self.nnodes,
+            procs=self.nprocs,
+            cores_per_task=self.ncores,
+            gpus=self.ngpus,
         )
-        # Cut out early (don't write history) if nothing restored
-        if (nrunning == 0) and (nqueued == 0):
-            return [], []
 
-        # This isn't really a restore, it's a discovery
-        LOGGER.info(f"[{self.type}] Found {nqueued} queued and {nrunning} running jobs")
-        LOGGER.info(self.__str__())
+        if "script" in self.job_desc:
+            kwargs = {"jobids": [jobid], "configjson": "/workdir/app-config.json"}
+            step.script = Template(self.job_desc["script"]).render(**kwargs)
 
-        # return the ones that we did not restore so wf can handle them
-        # These ids will be converted back to original sim ids
-        return jobs["success"], jobs["failed"]
-
-    def add_to_queue(self, sim_names, prepend=False):
-        """
-        Add some simulations to the queue. Unlike other Job Trackers, we submit
-        all jobs here up to the max allowed. Prepend is not used, and this function
-        inherits a lot of the logic of start_jobs.
-
-        Returns:
-            sim_names []:       the sims that were actually added
-        """
-        # These are from rabbitmq, the list of structure_iterXXXX names processed
-        # by the ml server
-        assert isinstance(sim_names, list)
-        assert all([isinstance(s, str) for s in sim_names])
-
-        # nothing to do for empty list
-        n = len(sim_names)
-        if n == 0:
-            return sim_names
-
-        LOGGER.info(f"[{self.type}] Evaluating {n} contender sims: {self.__str__()}")
-
-        # remove any duplicates
-        # Python 3.7 and later this will maintain ordering
-        sim_names = list(dict.fromkeys(sim_names))
-        if len(sim_names) < n:
-            LOGGER.warning(f"[{self.type}] Found only {len(sim_names)} unique sims")
-            n = len(sim_names)
-
-        # Don't add those that are already accounted for
-        jobs = self.list_jobs_by_status()
-        active_jobs = len(jobs["queued"]) + len(jobs["continue"])
-        sim_names = [x for x in sim_names if x not in jobs["all"]]
-
-        # finally, add these simulations, which is a submit
-        if not self.do_scheduling:
-            LOGGER.info(f"[{self.type}] Scheduling disabled")
-            return []
-
-        # Otherwise, submit. If there is an issue, we'd try again.
-        submit_success = []
-        for sim_name in sim_names:
-            # Have we gone over the allowed active (not completed) jobs?
-            current_jobs = len(submit_success) + active_jobs
-            if current_jobs >= self.max_jobs_total:
-                LOGGER.warning(
-                    f"Maximum jobs for {self.name} ({self.max_jobs_total}) reached, will not submit more."
-                )
-                break
-
-            # Otherwise, submit away!
-            if self.submit_job(sim_name):
-                submit_success.append(sim_name)
-
-        n = len(submit_success)
-        LOGGER.debug(f"[{self.type}]  {n} sims: {self.__str__()}: {submit_success}")
-        return submit_success
-
-    # --------------------------------------------------------------------------
-    def start_jobs(self, n_jobs):
-        """
-        This no longer needs to manually start - the add_to_queue that was just
-        run has already submit/started jobs. The result returned here does get
-        debug printed, but is returned and not used anywhere. Nothing meaningful
-        is returned.
-
-        Returns:
-            n_jobs:         number of jobs started
-            sims_started:   names of the sims started
-        """
-        return 0, []
-
-    # --------------------------------------------------------------------------
-    def write_script(self, sims_chunk: str):
-        """
-        Create a Maestro study step and cmd_script
-        """
-        assert self.do_scheduling == True
-        LOGGER.debug(f"[{self.type}] Creating step for {sims_chunk}...")
-        step = self.create_step([sims_chunk])
-        LOGGER.debug(f"[{self.type}] Step created: {step}")
-        components = self.adapter.write_script(self.workspace, step)
-        return components, step
-
-    # --------------------------------------------------------------------------
-    def update(self):
-        """Check all running jobs to update the status of the tracker. This has
-        been updated so this information is generated dynamically.
-
-        Returns:
-            sims_success = []:      simulations that have finished successfully
-            sims_failed = []:       simulations that have failed
-        """
-        # This used to cut out early if no running jobs, but we likely want
-        # to return successes / failures regardless.
-        LOGGER.info(self.__str__())
-
-        # Get all jobs by status
-        jobs = self.list_jobs_by_status()
-
-        # split the simulations of this job based on status
-        LOGGER.debug(f"[{self.type}] sims: success = {len(jobs['success'])}")
-        LOGGER.debug(f"[{self.type}] sims: failed = {len(jobs['failed'])}")
-        LOGGER.debug(f"[{self.type}] sims: continue = {(len(jobs['continue']))}")
-        LOGGER.debug(f"[{self.type}] sims: unknown = {len(jobs['unknown'])}")
-        LOGGER.debug(f"[{self.type}] sims: queued = {len(jobs['queued'])}")
-
-        # return the successful and failed sims for further processing
-        return jobs["success"], jobs["failed"]
+        # Is there a walltime set?
+        step.walltime = self.config.get("walltime", None)
+        return step

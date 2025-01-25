@@ -1,40 +1,40 @@
+import math
 import random
 
 from statemachine import State, StateMachine
 from statemachine.factory import StateMachineMetaclass
 from statemachine.utils import run_async_from_sync
+
 import mummi_operator.tracker as tracker
-import math
 
 
-def create_mummi_state_machine(definition: dict, **extra_kwargs):
+def create_mummi_job(definition: dict, **extra_kwargs):
     """
-    Create a MummiStateMachine class from a definition.
+    Create a MummiJob state machine.
+
+    This tracks and orchestrates one full job.
     """
     states_instances = {
         state_id: State(**state_kwargs) for state_id, state_kwargs in definition["states"].items()
     }
-
     events = {}
     for event_name, transitions in definition["events"].items():
         for transition_data in transitions:
             source = states_instances[transition_data["from"]]
             target = states_instances[transition_data["to"]]
-
             transition = source.to(
                 target,
                 event=event_name,
                 cond=transition_data.get("cond"),
                 unless=transition_data.get("unless"),
             )
-
             if event_name in events:
                 events[event_name] |= transition
             else:
                 events[event_name] = transition
 
     attrs_mapper = {**extra_kwargs, **states_instances, **events}
-    return StateMachineMetaclass("MummiStateMachine", (StateMachine,), attrs_mapper)
+    return StateMachineMetaclass("MummiJob", (StateMachine,), attrs_mapper)
 
 
 def next_step_config(self, current_name):
@@ -55,34 +55,10 @@ def on_enter_start(self):
     """
     On start, prepare to keep track of jobs completed
     """
+    # Each tracker is just for one job of each type
     if not hasattr(self, "trackers"):
         self.init_trackers()
-    if not hasattr(self, "completed"):
-        self.completed = {}
 
-    import IPython
-
-    IPython.embed()
-
-    # Simple algorithm to start:
-    # 1. Pack the max number of "next step" (first step) into max size
-    # This will use the namespace the workflow manager is running in
-    jobs = tracker.list_jobs()
-
-    # 2. TODO account for pending / running jobs here...
-    # This assumes the max size set by the user accounts for other stuff in cluster
-    # If we underestimate, we will just have pending jobs
-    
-    # TODO need to account for GPU / not GPU, right now we consider just nodes
-    next_step = self.next_step_config('start')
-    nodes_needed = next_step.get('nnodes', 1)
-    
-    # pack max into available
-    # TODO there are THREE places to get the name now, need to consolidate
-    submit_n = math.floor(self.workflow.max_size / nodes_needed)
-    for i in range(submit_n):
-        self.send(next_step['jobname'])
-    
 
 def init_trackers(self):
     """
@@ -92,92 +68,109 @@ def init_trackers(self):
     for state_name, state in self.states_map.items():
         if state_name in ["start", "complete"]:
             continue
-        self.trackers[state_name] = tracker.KubernetesTracker(
-            state_name, self.workflow
-        )
+        self.trackers[state_name] = tracker.KubernetesTracker(state_name, self.workflow)
 
 
-def on_change(self, job):
+def mark_running(self, running_state):
     """
-    On each job finish, re-assess.
+    Loop through states until we get to the running.
+    Mark previous states as successful / completed.
     """
-    print(job)
-    print("ON JOB FINISH")
-    import IPython
+    for state in self.states:
+        # This is based on logic we cannot get to a running state
+        # unless the previous state was successful. It also assumes
+        # "state" is input from a job, the name of a job step (and
+        # not start or complete that are abstract).
+        if state == running_state:
+            return
+        # If we get here, we have not hit the running state
+        # We assume we completed previous states with success
+        setattr(self, f"{state}_success", True)
 
-    IPython.embed()
 
-
-def is_complete(self, job_name, count) -> bool:
+def on_change(self):
     """
-    Return true if we have completed the desired count or more.
+    Call to change to submit new jobs, etc.
+
+    If a state has been marked as completed (success) we don't
+    continue to run it.
     """
-    return self.completed.get(job_name, 0) >= count
+    print(f"Entering state {self.current_state.id}")
+    # First check if this state already had success
+    # If yes, we return early (and don't submit the job again)
+    if getattr(f"{self.current_state.id}_success", False) == True:
+         print(f"State {self.current_state.id} is marked as successful.")
+         return
 
-    # TODO need to define an on start initial function that gets currnet cluster state
-    # def before_transition(self, event, state):
-    #    print(f"Before '{event}', on the '{state.id}' state.")
-    #    return "before_transition_return"
+    # If we failed, we also return. The required condition is not true so
+    # it cannot cycle. We will want to remove these state machines.
+    if getattr(f"{self.current_state.id}_failed", False) == True:
+         print(f"State {self.current_state.id} is marked as failed.")
+         return
 
-    # def on_transition(self, event, state):
-    #    print(f"On '{event}', on the '{state.id}' state.")
-    #    return "on_transition_return"
-
-    # def on_exit_state(self, event, state):
-    #    print(f"Exiting '{state.id}' state from '{event}' event.")
-
-    # def on_enter_state(self, event, state):
-    #    print(f"Entering '{state.id}' state from '{event}' event.")
-
-    # def after_transition(self, event, state):
-    #    print(f"After '{event}', on the '{state.id}' state.")
+    # We haven't succeeded or failed - submit a new job!
+    tracker = self.trackers[self.current_state.id]
+    tracker.submit_job(self.jobid)
 
 
-def new_mummi_state_machine(config):
+def new_mummi_job(config, jobid):
     """
-    New mummi state machine creates a new Mummi Workflow state machine.
+    New mummi job creates a new Mummi job state machine.
+
+    It's a dynamic state machine, so we start at the step that needs
+    to be submit.
     """
-    states = {"start": {"initial": True, "final": False}}
+    states = {"start": {"initial": True, "final": False}, "complete": {"initial": False, "final" True}}
     events = {"change": []}
+
+    # Extra kwargs here are class functions and "on_enter_<state>" functions
+    # TODO should we have on_enter_completed that deletes jobs?
+    extra_kwargs = {
+        "on_enter_start": on_enter_start,
+        "mark_running": mark_running,
+        "jobid": jobid,
+        "init_trackers": init_trackers,
+        "workflow": config,
+        "next_step_config": next_step_config,
+    }
+
     last = None
     for i, job in enumerate(config.jobs):
         states[job] = {"initial": False, "final": False}
         if i != 0:
-            # events[f"{last}_finish"] = [{"from": last, "to": job}]
-            events["change"].append({"from": last, "to": job})
+            # These booleans determine succcess (or TBA failure)
+            # It is a condition on the change
+            extra_kwargs[f"{last}_success"] = False
+            extra_kwargs[f"{last}_failure"] = False
+            events["change"].append({"from": last, "to": job, "cond": f"{last}_success"})
         else:
+            # This is the first step, so not conditional,
+            # But the next step will need to know this condition
+            extra_kwargs[f"{job}_success"] = False
+            extra_kwargs[f"{job}_failure"] = False
             events["change"].append({"from": "start", "to": job})
+
+        # If we are at the very last step, we add a completed state
+        # This is a state we move to on failure, or when it actually
+        # completes.
+        if i == len(config.jobs) - 1:
+            events["change"].append({"from": last, "to": "complete"})
+
+        # This ensures we run a function to submit the job when
+        # we change state, which means we successfully finished
+        # the previous step
+        extra_kwargs[f"on_enter_{job}"] = on_change
         last = job
+
+    # A boolean to indicate the sample has failed at some step
+    # We don't retry because we assume a bad starting data point
+    extra_kwargs['simulation_failed'] = False
 
     # Add last state (completed) and transition to it
     states["complete"] = {"initial": False, "final": True}
     events["change"].append({"from": last, "to": "complete"})
-    return create_mummi_state_machine(
-        {
-            "states": states,
-            "events": events,
-        },
-        is_complete=is_complete,
-        on_change=on_change,
-        on_enter_start=on_enter_start,
-        init_trackers=init_trackers,
-        workflow=config,
-        next_step_config=next_step_config,
-    )
-
-
-"""
-
-
-    async def is_hot(self, temperature: int):
-        return temperature > 25
-
-    async def is_good(self, temperature: int):
-        return temperature < 20
-
-    async def is_cool(self, temperature: int):
-        return temperature < 18
-
-    async def after_transition(self, event: str, source: State, target: State, event_data):
-        print(f"Running {event} from {source!s} to {target!s}: {event_data.trigger_data.kwargs!r}")
-"""
+    definition = {
+        "states": states,
+        "events": events,
+    }
+    return create_mummi_job(definition, **extra_kwargs)

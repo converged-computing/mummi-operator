@@ -5,22 +5,22 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: mini-mummi-cluster-roles
 rules:
-- apiGroups: 
+- apiGroups:
   - ""
   - batch
   resources: ["pods", "miniclusters", "customresourcedefinitions", "jobs", "configmaps", "jobs/status"]
-  verbs: ["list", "get", "patch", "create", "delete"]
+  verbs: ["list", "get", "patch", "create", "delete", "watch"]
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: mini-mummi-roles
 rules:
-- apiGroups: 
+- apiGroups:
   - ""
   - batch
   resources: ["pods", "miniclusters", "customresourcedefinitions", "jobs", "jobs/status", "configmaps"]
-  verbs: ["list", "get", "patch", "create", "delete"]
+  verbs: ["list", "get", "patch", "create", "delete", "watch"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

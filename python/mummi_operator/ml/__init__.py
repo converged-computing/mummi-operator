@@ -1,5 +1,5 @@
-import os
 import argparse
+import os
 import sys
 import traceback
 
@@ -8,6 +8,7 @@ import mummi_ras
 import yaml
 
 import mummi_operator
+import mummi_operator.utils as utils
 from mummi_operator.client import get_subparser_helper
 from mummi_operator.config import load_config
 from mummi_operator.logger import setup_logger
@@ -50,28 +51,30 @@ def get_parser():
         formatter_class=argparse.RawTextHelpFormatter,
     )
     start.add_argument(
-        "--mlconfig",
+        "--config",
         help="Machine Learning config filename",
-        default="mlserver.yaml",
+        default="app-config.json",
     )
     start.add_argument(
-        "--number-samples",
-        help="Number of samples",
-        default=2,
-        type=int,
+        "--outdir",
+        help="Output directory",
+        default=os.getcwd(),
     )
     start.add_argument(
-        "--config-dir",
-        help="Directory with configuration files.",
+        "--jobid",
+        help="Sample identifiers",
+        action="append",
     )
     return parser
 
 
-def load_mlrunner_config(config_dir, config_file):
+def load_mlrunner_config(config_file):
     """
     load and validate content of MLRunner config
     """
-    config = load_config(config_dir, config_file)
+    if not os.path.exists(config_file):
+        raise ValueError(f"Config {config_file} does not exist.")
+    config = utils.read_json(config_file)
     if config.get("encoder") is None or config["encoder"].get("path") is None:
         raise ValueError("No encoder specified")
     if config.get("workspace") is None or config["workspace"].get("path") is None:
@@ -132,11 +135,11 @@ def main():
     mummi_core.init()
     mummi_core.create_root()
 
-    config = load_mlrunner_config(args.config_dir, args.mlconfig)
+    config = load_mlrunner_config(args.config)
     try:
-        server = MLRunner(config=config, number_samples=args.number_samples)
-        server.setup()
-        server.run()
+        runner = MLRunner(config=config, ids=args.jobid, outdir=args.outdir)
+        runner.setup()
+        runner.run()
     except Exception as e:
         print(f"> Exiting ML runner due to error ({e})")
         traceback.print_exc()

@@ -14,6 +14,7 @@
 import datetime
 import fcntl
 import glob
+import logging
 import multiprocessing
 import os
 import pathlib
@@ -44,18 +45,22 @@ from mummi_ras.ml.samplers.interpolators.feedback_interpolator import FeedbackOT
 from mummi_ras.ml.samplers.interpolators.ot_interpolator import OTInterpolator
 from mummi_ras.ml.validators import CGValidator
 
+import mummi_operator.manager.registry as registry
+
+# Print debug for now
+logging.basicConfig()
 LOGGER = getLogger(__name__)
+logging.root.setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 
 def write_patches(
     outpath: str, iteration_id: int, new_positions: np.array
 ) -> Union[List[str], List[Any]]:
     """
-    From positions, write a patch as a npz file and
-    return its path.
+    From positions, write a patch as a npz file and return its path.
     """
-    iteration_id = "{:02d}".format(iteration_id)
-    RPATH = os.path.join(outpath, f"iter{iteration_id}")
+    RPATH = os.path.join(outpath, iteration_id)
     if not os.path.isdir(RPATH):
         os.makedirs(RPATH, exist_ok=True)
 
@@ -74,7 +79,7 @@ def write_patches(
         positions = new_positions[sidx]
         structure_id = "{:012d}".format(offset + sidx)
 
-        structure_name = f"structure_iter{iteration_id}_{structure_id}"
+        structure_name = f"{iteration_id}_{structure_id}"
         all_structure_names.append(structure_name)
         outfile_positions = os.path.join(RPATH, f"{structure_name}.npz")
         files[sidx] = f"{structure_name}.npz"
@@ -228,119 +233,6 @@ def update_sampling_db(
     LOGGER.info(f"Upgraded DB at {database} with {new_records} new records")
 
 
-def generate_new_samples(**config: dict) -> List[str]:
-    """
-    Sample k_sample from the latent space, generate the k_samples corresponding
-    structures and validate them. Return the structures that passed the validation.
-    """
-    process_sampler = config["process_generator"]
-    # We are waiting for the sampler to be created in a dedicated thread
-    if process_sampler.is_alive():
-        LOGGER.info(f"Waiting on sampler ({process_sampler}) to be created...")
-        process_sampler.join()
-
-    # Result from the process manager
-    # Not sure which is supposed to exist
-    result = config.get("process_manager_result") or config.get("process_generator_result")
-    print(result)
-    iteration_id = config["iteration_id"]
-    k_samples = max(int(config["body"].get("k_samples")), 0)
-    strict = bool(config["body"].get("strict"))
-    # Get back objects
-    sampler = config["manager"]["sampler"]
-    generator = config["obj_generator"]
-    validator = config["obj_validator"]
-    # --------------------------------------------------------------------------
-    nMaxSelectedPatchBuffer: int = int(config["nMaxSelectedPatchBuffer"])
-    # This factor defines the factor of extra structure we will generate
-    # Example: if equals to 2, we will select up to 2 * nMaxSelectedPatchBuffer structure at most
-    # It is useful in case a lot of createsim are failing (which the ML server does not know about)
-    factor_extra_structures = int(config["sampler"]["factor_extra_structures"])
-
-    # # Setting feedback DB for sampler
-    feedback_db_path = config["sampling_db"]
-    # We do not need to select more than what is defined in wfmanager.yaml
-    num_validated = validator.num_validated(iteration_id)
-    if num_validated >= factor_extra_structures * nMaxSelectedPatchBuffer:
-        LOGGER.info(
-            f"=> {num_validated} / {factor_extra_structures * nMaxSelectedPatchBuffer} have already been selected"
-        )
-        return []
-    else:
-        LOGGER.info(
-            f"=> {num_validated} / {factor_extra_structures * nMaxSelectedPatchBuffer}. We can sample more"
-        )
-
-    new_structure_names = []
-    new_ls_coords = []
-    new_lambda = []
-    new_validation_status = []
-
-    total_valid_files = []
-    loop_iter = 0
-    num_new_sample = 0
-    while len(total_valid_files) < k_samples:
-        sample_start = time.time()
-        ls_coords = sampler.get_new_ls_points(k_samples)
-        sample_end = time.time() - sample_start
-        LOGGER.info(f"Sampled {k_samples} in {sample_end} seconds")
-
-        for pts in ls_coords:
-            new_ls_coords.append(pts.get_coordinates())
-            new_lambda.append(pts.get_lamda())
-        num_new_sample += len(ls_coords)
-
-        new_positions = generator.decode(ls_coords)
-        names_array, positions_array = write_patches(
-            outpath=config["generator"]["outpath"],
-            iteration_id=iteration_id,
-            new_positions=new_positions,
-        )
-        new_structure_names.append(names_array)
-        LOGGER.debug(f"generated structures done. new_positions = {new_positions.shape}")
-
-        return_array = validator.validateArrayThreaded(iteration_id, names_array, positions_array)
-        # return_array = validator.validateArray(iteration_id, names_array, positions_array)
-        if len(return_array) > 0:
-            new_validation_status.append(return_array[:, 0])
-
-        _, valid_files = validator.write_validation_info(
-            iteration_id=iteration_id, return_array=return_array, all_structure_names=names_array
-        )
-        valid_files = [
-            os.path.join(validator.current_rpath, f.split(".gro")[0]) for f in valid_files
-        ]
-        LOGGER.debug(
-            f"ITER = {loop_iter} => valid structures={[os.path.join(validator.current_rpath, f) for f in valid_files]}"
-        )
-        total_valid_files += list(valid_files)
-
-        with FileLock(config["lock_sampling_db"]) as _:
-            # Update sampling DB for feedback
-            update_sampling_db(
-                database=feedback_db_path,
-                model_name=config["encoder_path"],
-                num_new_sample=len(ls_coords),
-                structure_names=new_structure_names,
-                ls_coords=new_ls_coords,
-                lambda_values=new_lambda,
-                validation_status=new_validation_status,
-            )
-
-        loop_iter += 1
-        num_validated = validator.num_validated(iteration_id)
-        if num_validated >= factor_extra_structures * nMaxSelectedPatchBuffer:
-            LOGGER.info(
-                f"=> {num_validated} / {factor_extra_structures * nMaxSelectedPatchBuffer} have been selected, returning []"
-            )
-            break
-        if not strict:
-            break
-
-    LOGGER.info(f"[{loop_iter}] valid_files({len(total_valid_files)})={total_valid_files}")
-    return total_valid_files
-
-
 def create_sets(training_data_files: List[str]) -> List[List]:
     sets = {}
     assert len(list(training_data_files)) != 0
@@ -382,157 +274,70 @@ class MLRunner:
     Intended to be run as a job.
     """
 
-    def __init__(self, config: dict, number_samples=1) -> None:
+    def __init__(self, config: dict, ids, outdir: str) -> None:
         self.config = config
         self.logger = LOGGER
-        self.number_samples = number_samples
+        self.outdir = outdir
+        self.ids = ids
         self.hostname = mummi_core.get_hostname(contract_hostname=False)
-
-        self._exit = multiprocessing.Event()  # Trigger the daemon to exit.
-        self._error = multiprocessing.Event()  # Trigger the daemon to exit.
-        self._setup = multiprocessing.Event()  # Wait until the daemon is setup.
-        self._manager = multiprocessing.Manager()
-        self.feedback = None  # Could be process if we choose to activate feedback
+        # Could be process if we choose to activate feedback
+        self.feedback = None
         self.filelock = tempfile.mkstemp(prefix="mummi-sampling-", suffix=".lock", dir=None)[1]
-        self.waittime = 180  # time between two checks for createsims status (in seconds)
-
+        # time between two checks for createsims status (in seconds)
+        self.waittime = 180
         self.mini_mummi = False
 
-    def is_exit(self):
-        return self._exit.is_set()
+    @property
+    def n_max_selected_patch_buffer(self):
+        return self.config["sampler"].get("n_max_selected_patch_buffer") or 0
 
-    def is_error(self):
-        return self._error.is_set()
+    @property
+    def database_dir(self):
+        return os.path.join(self.config["sampler"]["outpath"], "feedback")
 
-    def exit(self):
-        self._exit.set()
+    @property
+    def sampling_db(self):
+        return os.path.join(self.database_dir, self.config["sampler"]["feedback"]["database"])
 
-    def error(self):
-        self._error.set()
+    @property
+    def feedbackframe_db(self):
+        return os.path.join(self.database_dir, self.config["sampler"]["feedback"]["frame_database"])
 
-    def signal_wrapper(self, name, pid):
-        def handler(signum, frame):
-            self.logger.warning(
-                f"Received (SIGNUM={signum}) for {name}[pid={pid}], stopping the process..."
-            )
-            if self.feedback:
-                try:
-                    self.feedback.join()  # We stop the process updating the feedback file
-                    self.feedback_frames.join()
-                except AssertionError as e:
-                    pass
-                try:
-                    os.remove(self.filelock)
-                except FileNotFoundError as _:
-                    pass
-            self.exit()
-            exit(1)
+    @property
+    def sampler_interpolator(self):
+        return self.config["sampler"]["interpolator"]
 
-        return handler
+    @property
+    def pickle_interpolator(self):
+        return self.config["sampler"].get("pre_computed")
+
+    @property
+    def encoder_name(self):
+        return self.config["encoder"]["model"]
+
+    @property
+    def encoder_path(self):
+        return os.path.join(self.config["encoder"]["path"], self.encoder_name)
 
     def read_specs(self):
-        try:
-            self.logger.info(f"ML Server launched on host: {self.hostname}")
-            use_flux = self.config["config"]["flux"] is True
+        self.logger.info(f"ML Server launched on host: {self.hostname}")
+        os.makedirs(self.database_dir, exist_ok=True)
+        self.do_feedback = bool(self.config["sampler"]["feedback"]["do_feedback"])
+        self.mini_mummi = bool(self.config["config"].get("mini_mummi", False))
+        if self.pickle_interpolator and os.path.isfile(self.pickle_interpolator):
+            self.logger.info(f"Pre-computed interpolator found: {self.pickle_interpolator}")
 
-            # ------------------------------------------------------------------
-            # identify scheduler interface (or skip if flux disabled)
-            # TODO this should be refactored to be an actual scheduler interface
-            self.flux = flux_uri(override_uri_from_file=False) if use_flux else None
-            if use_flux:
-                self.logger.info(f"  flux  uri: [{self.flux}]")
-                flux_uri_local = os.environ.get("FLUX_URI", None)
-                self.logger.info(f"  local uri: [{flux_uri_local}]")
-            else:
-                self.logger.info(f"  flux is disabled")
-
-            # --------------------------------------------------------------------------
-            wfmngr = get_named_specfile("wfmanager.yaml")
-            try:
-                self.nMaxSelectedPatchBuffer = int(
-                    wfmngr["wfmanager"]["config"].get("nMaxSelectedPatchBuffer")
-                )
-            except Exception as _:
-                self.nMaxSelectedPatchBuffer = 0
-            self.config["nMaxSelectedPatchBuffer"] = self.nMaxSelectedPatchBuffer
-
-            try:
-                self.iteration_id = int(wfmngr["wfmanager"]["config"].get("mlserver_round_id"))
-            except Exception as _:
-                self.iteration_id = 0
-            self.config["iteration_id"] = self.iteration_id
-            self.iteration_path = "iter{:02d}".format(self.iteration_id)
-            self.config["iteration_path"] = self.iteration_path
-
-            self.sampling_db = os.path.join(self.config["sampler"]["outpath"], self.iteration_path)
-            self.sampling_db = os.path.join(self.sampling_db, "feedback")
-            os.makedirs(self.sampling_db, exist_ok=True)
-            self.sampling_db = os.path.join(
-                self.sampling_db, self.config["sampler"]["feedback"]["database"]
-            )
-
-            self.feedbackframe_db = os.path.join(
-                self.config["sampler"]["outpath"], self.iteration_path
-            )
-            self.feedbackframe_db = os.path.join(self.feedbackframe_db, "feedback")
-            os.makedirs(self.feedbackframe_db, exist_ok=True)
-            self.feedbackframe_db = os.path.join(
-                self.feedbackframe_db, self.config["sampler"]["feedback"]["frame_database"]
-            )
-
-            self.do_feedback = bool(self.config["sampler"]["feedback"]["do_feedback"])
-
-            if "mini_mummi" in self.config["config"]:
-                self.mini_mummi = bool(self.config["config"]["mini_mummi"])
-
-            if self.mini_mummi:
-                LOGGER.info("Run in mini MuMMI mode")
-
-            self.config["sampling_db"] = self.sampling_db
-            self.config["lock_sampling_db"] = self.filelock
-            self.sampler_interpolator = self.config["sampler"]["interpolator"]
-            self.pickle_interpolator = self.config["sampler"].get("pre_computed")
-            if self.pickle_interpolator and os.path.isfile(self.pickle_interpolator):
-                self.logger.info(
-                    f"We will use a pre-computed interpolator: {self.pickle_interpolator}"
-                )
-
-            self.encoder_name = self.config["encoder"]["model"]
-            self.encoder_path = os.path.join(self.config["encoder"]["path"], self.encoder_name)
-            self.config["encoder_path"] = self.encoder_path
-            self.credentials_path = os.path.join(
-                self.config["workspace"]["path"], self.config["workspace"]["credentials"]
-            )
-            self.certificate_path = os.path.join(
-                self.config["workspace"]["path"], self.config["workspace"]["certificate"]
-            )
-
-            usr = os.environ.get("USER", "mummiusr")
-            self.queue = self.config["broker"]["queue"] + "_" + usr
-            if usr == "mummiusr":
-                self.logger.warning(f"Did not find current user: defaulted to {usr}")
-            self.broker_interface = self.config["broker"]["interface"]
-
-            self.logger.info(f"> Initializing MuMMI ML Server")
-            self.logger.info(f"  > Server")
-            self.logger.info(f"    > Interface                {self.broker_interface}")
-            self.logger.info(f"    > Credentials              {self.credentials_path}")
-            self.logger.info(f"    > Certificate              {self.certificate_path}")
-            self.logger.info(f"    > Queue                    {self.queue}")
-            self.logger.info(f"  > Sampler")
-            self.logger.info(f"    > Interpolator             {self.sampler_interpolator}")
-            self.logger.info(f"    > Run with feedback        {self.do_feedback}")
-            self.logger.info(f"    > Createsims Feedback DB   {self.sampling_db}")
-            self.logger.info(f"    > CG frames Feedback DB    {self.feedbackframe_db}")
-            self.logger.info(f"  > Generator")
-            self.logger.info(f"    > Encoder                  {self.encoder_path}")
-            self.logger.info(f"  > Validator")
-            self.logger.info(f"  > nMaxSelectedPatchBuffer    {self.nMaxSelectedPatchBuffer}")
-        except Exception as e:
-            traceback.print_exc()
-            self.logger.error("ML Server failed during reading specs!")
-            self.error()
-            raise e
+        self.logger.info(f"> Initializing MuMMI ML Runner")
+        self.logger.info(f"  > Mini-Mummi                 {self.mini_mummi}")
+        self.logger.info(f"  > Sampler")
+        self.logger.info(f"    > Interpolator             {self.sampler_interpolator}")
+        self.logger.info(f"    > Run with feedback        {self.do_feedback}")
+        self.logger.info(f"    > Createsims Feedback DB   {self.sampling_db}")
+        self.logger.info(f"    > CG frames Feedback DB    {self.feedbackframe_db}")
+        self.logger.info(f"  > Generator")
+        self.logger.info(f"    > Encoder                  {self.encoder_path}")
+        self.logger.info(f"  > Validator")
+        self.logger.info(f"  > nMaxSelectedPatchBuffer    {self.n_max_selected_patch_buffer}")
 
     def _setup_training_sets(self):
         training_dir = os.path.join(self.encoder_path, "training")
@@ -569,13 +374,23 @@ class MLRunner:
         return states
 
     def setup_sampler(self):
+        """
+        Setup the sampler.
+        """
+        # Assume we aren't doing feedback
+        feedback_db_path = None
+        feedbackframe_db = None
+
         if self.do_feedback:
             # Setting feedback DB for sampler
-            feedback_db_path = self.config["sampling_db"]
+            feedback_db_path = self.sampling_db
             feedbackframe_db = self.feedbackframe_db
+
+            # self.sampling_db is the feedback_db_path
             if not os.path.isfile(feedback_db_path):
                 create_sampling_db(feedback_db_path, self.encoder_path)
 
+            # Fall back to not doing feedback if invalid
             if not checking_sampling_db(feedback_db_path, self.encoder_path):
                 feedback_db_path = None
                 feedbackframe_db = None
@@ -584,8 +399,6 @@ class MLRunner:
             else:
                 LOGGER.info(f"Feedback DB for sampling located in {feedback_db_path}")
         else:
-            feedback_db_path = None
-            feedbackframe_db = None
             LOGGER.info(f"All feedback is deactivated for this run.")
 
         start = time.time()
@@ -636,218 +449,120 @@ class MLRunner:
             # )
 
     def setup_validator(self):
-        iteration_path = self.config["validator"]["outpath"]
         resource_name = self.config["validator"]["resources"]
         complex_name = self.config["validator"]["complex"]
         healing = bool(self.config["validator"]["healing"])
         cleanup = bool(self.config["validator"]["cleanup"])
         resource_path = Naming.dir_res(resource_name)
 
-        # Do we want to push valid samples to an OCI registry with oras (pip install oras)?
-        # Note that if we want an authenticated registry, envars will be needed here
-        oras = self.config.get("oras") if self.config["config"].get("use_oras") is True else None
-
-        LOGGER.info(f"Oras setup {oras}")
-
         return CGValidator(
-            iteration_path=iteration_path,
+            iteration_path=self.outdir,
             resource_path=resource_path,
             complex_name=complex_name,
             healing=healing,
             cleanup=cleanup,
             mini_mummi=self.mini_mummi,
-            oras=oras,
         )
 
-    def start_essential_components(self, results: dict):
-        """
-        This function just start the sampler. It is supposed to be
-        running in a dedicated thread as the sampler can take a
-        long time to get ready.
-        """
-        try:
-            results["sampler"] = self.setup_sampler()
-        except Exception as e:
-            traceback.print_exc()
-            self.logger.error("ML Server failed during setup!")
-            self.error()
-            raise e
-
-    @staticmethod
-    def start_feedback_frames(
-        config: dict, database: str, path: str, model_name: str, mini_mummi: bool = False
-    ):
-        # We have to duplicate model because multiprocessing does not support CUDA/Pytorch
-        # or we should use spawn which is tricky
-        if mini_mummi:
-            model = FullMiniDenseAutoencoder(model_path=model_name, device="cpu")
-        else:
-            model = FullDenseAutoencoder(model_path=model_name, device="cpu")
-
-        # Process that watches frames being outputed by ddcmd
-        feedback_frames = FeedbackFrames(
-            database=database, path=path, model=model, model_name=model_name
-        )
-        feedback_frames.start()
-
-    # --------------------------------------------------------------------------
     def setup(self) -> None:
-        if self._setup.is_set():
-            return
-        try:
-            self.read_specs()
-            self.sampler = None
-            self.generator = self.setup_generator()
-            self.validator = self.setup_validator()
-            # # Will gather result
-            self.config["manager"] = self._manager.dict()
-            result = self.start_essential_components(self.config["manager"])
-            self.config["process_generator_result"] = result
-        except Exception as e:
-            traceback.print_exc()
-            self.logger.error("ML Server failed during setup!")
-            self.error()
-            raise e
-
-        # Set that the deamon is now setup.
-        self._setup.set()
-
+        """
+        Setup the MLRunner
+        """
+        self.read_specs()
+        self.sampler = None
+        self.generator = self.setup_generator()
+        self.validator = self.setup_validator()
+        # # Will gather result
+        self.sampler = self.setup_sampler()
         # TODO the feedback would be here.
-        if self.do_feedback:
-            pass
-            # sims_cg = Naming.dir_root("all-cg")
-            # self.feedback = MLServerRPC.watch_createsims(self.sampling_db, self.encoder_path, sims_cg, self.filelock, self.waittime, self.logger)
-
-            # Process that watches frames being outputed by ddcmd
-            # tmp_config = self.config.copy()
-            # feed_path = Naming.dir_root("feedback-cg")
-            # self.feedback_frames = multiprocessing.Process(
-            #    target = MLServerRPC.start_feedback_frames,
-            #    args = (tmp_config, self.feedbackframe_db, feed_path, self.encoder_path, self.mini_mummi,)
-            # )
 
     def run(self) -> None:
-        p = multiprocessing.current_process()
-        signal.signal(signal.SIGTERM, self.signal_wrapper("mlserver", p.pid))
-        signal.signal(signal.SIGINT, self.signal_wrapper("mlserver", p.pid))
-        # We start listening for commands (RPC) from the Workflow Manager
-        input_config = self.config.copy()
-        input_config["obj_generator"] = self.generator
-        input_config["obj_validator"] = self.validator
-
-        # Disabled for now
-        # if self.do_feedback:
-        #    self.feedback.start()
-        #    self.logger.info(f"Started process {self.feedback} to watch createsims")
-
-        #    self.feedback_frames.start()
-        #    self.logger.info(f"Started process to process feedback frames in {self.feedbackframe_db}")
-        # Add the number of samples to config, this will be number of successful
-        # TODO this needs to come from command line
-        input_config["body"] = {"k_samples": self.number_samples}
+        """
+        Run the mlserver to generate some number of samples.
+        """
+        oras = self.config.get("oras") if self.config["config"].get("use_oras") is True else None
+        LOGGER.info(f"Oras setup {oras}")
 
         # Generate new samples and push to registry
-        generate_new_samples(**input_config)
+        for jobid in self.ids:
+            sample = self.generate_new_sample(jobid)
+            push_artifact(
+                sample[0],
+                name=jobid,
+                host=oras["host"],
+                tls_verify=oras["tls_verify"],
+                plain_http=oras["plain_http"],
+            )
 
-    @staticmethod
-    def watch_createsims(
-        sampling_db: str,
-        encoder_path: str,
-        createsims_dir: str,
-        filelock: str,
-        wait: int,
-        logger: Logger,
-    ):
+    def generate_new_sample(self, jobid):
         """
-        Check all directories in createsims_dir to see if they contains createsims_success or createsims_failure.
-        then update sampling_db file. This function will wait for "wait" seconds between each check.
+        Generate a sample structure that passes validation.
+
+        Note that saving to the feedback database is removed since we are running as a job
+        and won't use it, but we do need to address how to get some kind of randomness.
         """
-        createsims_status = {}
-        file_patterns = ["createsims_success", "createsims_failure"]
+        new_ls_coords = []
+        new_lambda = []
+        new_validation_status = []
+        num_new_sample = 0
 
-        if not os.path.isfile(sampling_db):
-            create_sampling_db(sampling_db, encoder_path)
-
-        logger.info(f"Start monitoring for feedback {sampling_db}")
-
-        # File we will be writing (just in case to not corrupt the file in case of interruption)
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        db_path = os.path.splitext(sampling_db)
-        database_tmp = f"{db_path[0]}-{timestr}{db_path[1]}"
-
+        # Keep going until we have a valid sample
         while True:
-            with FileLock(filelock):
-                start = timer()
-                for folder in os.scandir(createsims_dir):
-                    logger.debug(f"Checking {folder.path}")
-                    struct_name = os.path.basename(folder.path)
-                    success = os.path.exists(os.path.join(folder.path, file_patterns[0]))
-                    failure = os.path.exists(os.path.join(folder.path, file_patterns[1]))
-                    if success:
-                        createsims_status[struct_name] = 1  # True
-                        logger.debug(f"Found success for {struct_name}")
-                    if failure:
-                        createsims_status[struct_name] = 0  # False
-                        logger.debug(f"Found failure for {struct_name}")
-                    if success and failure:
-                        logger.warning(f"Found success and failure for {struct_name}")
-                try:
-                    with np.load(sampling_db, allow_pickle=True) as data:
-                        structure_names = data["structure_names"]
-                        previous_createsims_status = data["createsims_status"]
-                        model_name = data["model_name"]
-                        created_at = data["created_at"]
-                        ls_coords = data["ls_coords"]
-                        lambda_values = data["lambda_values"]
-                        validation_status = data["validation_status"]
-                except Exception as e:
-                    logger.error(f"{sampling_db} {e}")
-                    break
+            sample_start = time.time()
+            ls_coords = self.sampler.get_new_ls_points(1)
+            sample_end = time.time() - sample_start
+            LOGGER.info(f"Sampled 1 in {sample_end} seconds")
+            for pts in ls_coords:
+                new_ls_coords.append(pts.get_coordinates())
+                new_lambda.append(pts.get_lamda())
+            num_new_sample += len(ls_coords)
 
-                # Update existing createsims status
-                for updated_struct, status in createsims_status.items():
-                    logger.debug(f"Updating {updated_struct} status={status}")
-                    index = np.where(structure_names == updated_struct)[0]
-                    if len(index) == 0:
-                        logger.warning(
-                            f"{updated_struct} is running as a createsims but "
-                            f"has not been sampled by that sampler. It should not "
-                            f"happened unless you mixed feedback DBs from two different runs. Index = {index}"
-                        )
-                    elif len(index) == 1:
-                        logger.debug(
-                            f"Updated {updated_struct} from {previous_createsims_status[index]} => {status}"
-                        )
-                        previous_createsims_status[index] = status
-                    else:
-                        logger.error(
-                            f"{updated_struct} has duplicate in {sampling_db}. The DB is likely corrupted. (Index={index})"
-                        )
+            new_positions = self.generator.decode(ls_coords)
+            names_array, positions_array = write_patches(
+                outpath=self.config["generator"]["outpath"],
+                iteration_id=jobid,
+                new_positions=new_positions,
+            )
+            LOGGER.debug(f"generated structures done. new_positions = {new_positions.shape}")
 
-                np.savez_compressed(
-                    database_tmp,
-                    model_name=model_name,
-                    created_at=created_at,
-                    updated_at=datetime.datetime.now().strftime("%d.%m.%Y-%H:%M:%S"),
-                    structure_names=structure_names,
-                    ls_coords=ls_coords,
-                    lambda_values=lambda_values,
-                    validation_status=validation_status,
-                    createsims_status=previous_createsims_status,
-                )
-                # We make sure the new file is not corrupted somehow
-                try:
-                    with np.load(database_tmp, allow_pickle=True) as test:
-                        logger.debug(f"{database_tmp} is valid {test.files}")
-                except Exception as e:
-                    logger.warning(
-                        f"{database_tmp} seems to be corrupted. We keep the old {sampling_db} intact"
-                    )
-                    return
-                os.replace(database_tmp, sampling_db)
-                end = timer() - start
-                if len(createsims_status) > 0:
-                    logger.info(
-                        f"Updated {len(createsims_status)} structures in {end:.3f} seconds ({len(createsims_status)/end} struct/sec)"
-                    )
-            time.sleep(wait)
+            # Our jobid looks like structure_<number> and we need to pass just the number here
+            # This isn't great, but I don't want to copy over all the validator code
+            iteration_id = int(jobid.replace("structure_", ""))
+            return_array = self.validator.validateArray(iteration_id, names_array, positions_array)
+            is_valid = return_array[0][0]
+
+            # if not valid, try again
+            if not is_valid:
+                continue
+
+            # Write npz to file
+            _, valid_files = self.validator.write_validation_info(
+                iteration_id=iteration_id,
+                return_array=return_array,
+                all_structure_names=names_array,
+            )
+            valid_files = [os.path.join(self.validator.current_rpath, f) for f in valid_files]
+            LOGGER.debug(
+                f"mlrunner {jobid} => valid structures={[os.path.join(self.validator.current_rpath, f) for f in valid_files]}"
+            )
+            if is_valid:
+                break
+
+        return valid_files
+
+
+def push_artifact(path, name, host, tls_verify=None, plain_http=None):
+    """
+    Push a named artifact to an OCI compliant registry
+    """
+    artifact = registry.RegistryArtifact()
+
+    # The is the path and mediaType. I'm assuming this is a binary format
+    artifact.add_archive(path, "application/octet-stream")
+    artifact.summary()
+
+    # Push to a URI that is cleaned / parsed.
+    # registry-0.mini-mummi.default.svc.cluster.local:5000/structure_iter00_000000000388:latest
+    uri = registry.generate_uri(host, name=name)
+    LOGGER.info(f"Request to push {path} to oras registry {uri}")
+    artifact.push(uri, tls_verify=tls_verify, plain_http=plain_http)

@@ -1,47 +1,43 @@
 # The manager is intended to be run in a container (as a service) to orchestrate
 # a workflow.
 
+import math
+import multiprocessing
 import os
+import random
 import signal
 import sys
-import yaml
 import timeit
 import traceback
-import multiprocessing
+import uuid
+from logging import getLogger
 from multiprocessing.managers import SyncManager
-import pika
 
 import mummi_core
-import mummi_operator.defaults as defaults
-from mummi_core.workflow.job import JOB_TYPES, JOB_NEXT_QUEUE
-from mummi_core.workflow.flux_env import flux_uri
-from mummi_core.utils.timer import Timer
-
-from kubernetes import config
-
-from mummi_operator.config import load_config
-from mummi_operator.machine import new_mummi_state_machine
 import mummi_ras
+import pika
+import yaml
+from kubernetes import client, config, watch
+from mummi_core.utils.timer import Timer
+from mummi_core.workflow.flux_env import flux_uri
+from mummi_core.workflow.job import JOB_NEXT_QUEUE, JOB_TYPES
 from mummi_ras import Naming
-from mummi_ras.transformations.patch_creator import MacroPatchCreator
-from mummi_ras.ml.selectors import CGSelector, CGSelectorType
-from mummi_ras.feedback.feedback_manager_macro import MacroFeedbackManager, FeedbackManagerType
 from mummi_ras.feedback.feedback_manager_aatocg import FeedbackManager_AA2CG
+from mummi_ras.feedback.feedback_manager_macro import FeedbackManagerType, MacroFeedbackManager
+from mummi_ras.ml.selectors import CGSelector, CGSelectorType
+from mummi_ras.transformations.patch_creator import MacroPatchCreator
 
-from logging import getLogger
+import mummi_operator.defaults as defaults
+from mummi_operator.config import load_config
+from mummi_operator.machine import new_mummi_job
 
 LOGGER = getLogger(__name__)
 
-# We need to import the KubernetesTracker to submit jobs as CRDs
-# This should (could) eventually be part of mummi_core, for now
-# it's an experiment here
-from mummi_operator.tracker import KubernetesTracker as Tracker
+import mummi_operator.tracker as tracker
 
 
-# ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
 class WorkflowManager:
-    def __init__(self, cfg, scheduler=defaults.default_scheduler):
+    def __init__(self, cfg, workflow, scheduler=defaults.default_scheduler):
         """
         Initialize the WorkflowManager. Much of this logic used to be in setup,
         but it makes sense to be on the class instance init.
@@ -52,6 +48,10 @@ class WorkflowManager:
         - multiprocessing/events are removed, will be a part of state machine.
         """
         self.config = cfg
+        self.workflow = workflow
+
+        # Job prefix (defaults to structure_, don't change)
+        self.set_prefix()
 
         # Running modes (we only allow kubernetes for now)
         self.scheduler = scheduler
@@ -66,12 +66,23 @@ class WorkflowManager:
         if self.scheduler == "kubernetes":
             self.load_kubernetes_config()
 
-        # Init the state machine with the jobs
-        self._init_state_machine()
-
     @property
     def wconfig(self):
         return self.config["wfmanager"]["config"]
+
+    def set_prefix(self):
+        """
+        Set a prefix for job identifiers
+        """
+        if "prefix" not in self.wconfig:
+            self.wconfig["prefix"] = defaults.default_prefix
+
+    @property
+    def prefix(self):
+        """
+        The job prefix (defaults to mummi)
+        """
+        return self.wconfig.get("prefix") or "mummi"
 
     def load_kubernetes_config(self):
         """
@@ -81,13 +92,6 @@ class WorkflowManager:
             config.load_incluster_config()
         except:
             config.load_config()
-
-    def _init_state_machine(self):
-        """
-        Create the state machine
-        """
-        # This is the class that will be instantiated on start()
-        self.state_machine_model = new_mummi_state_machine(self.config['workflow'])
 
     def _init_cg_selection(self):
         self.cgselector = None
@@ -99,7 +103,9 @@ class WorkflowManager:
 
             wspace = os.path.join(Naming.dir_root("ml"), "cg")
             os.makedirs(wspace, exist_ok=True)
-            self.cgselector = CGSelector(CGSelectorType.Manager, "manager", wspace, ml_config)
+            self.cgselector = CGSelector(
+                CGSelectorType.Manager, "manager", wspace, ml_config
+            )
             self.cgselector.restore()
 
     def _init_feedback_cg2macro(self):
@@ -155,7 +161,10 @@ class WorkflowManager:
 
             if config.get("encoder") is None or config["encoder"].get("path") is None:
                 raise ValueError(f"No encoder specified in mlserver.yaml")
-            if config.get("workspace") is None or config["workspace"].get("path") is None:
+            if (
+                config.get("workspace") is None
+                or config["workspace"].get("path") is None
+            ):
                 raise ValueError(f"No workspace specified in mlserver.yaml")
 
             wspace = config["workspace"]["path"]
@@ -175,59 +184,14 @@ class WorkflowManager:
             LOGGER.info(f"    > Certificate {certificate_path}")
             LOGGER.info(f"    > Routing key {routing_key}")
 
-    def restore(self):
-        print("TODO RESTORE")
-        import IPython
-
-        IPython.embed()
-
-        state = self.iointerface.load_checkpoint(self.chkpt, loader=yaml.UnsafeLoader)
-        if len(state) == 0:
-            return
-
-        LOGGER.info(f"Restoring workflow as of {state['ts']}")
-        sys.stdout.flush()
-
-        # restore the data
-        self.iterCounterWF = state["iterCounterWF"]
-        self.iterCounterPC = state["iterCounterPC"]
-        self.patchCounter = state["patchCounter"]
-
-        # Assume kubernetes is always warm (same cluster)
-        warm_restart = True if self.scheduler == "kubernetes" else False
-        if self.flux is not None:
-            prev_flux = state["flux"]
-            warm_restart = self.flux == prev_flux
-            wstring = "Warm" if warm_restart else "Cold"
-            LOGGER.info(f"{wstring} restart of the Workflow! flx={self.flux}, prev_flx={prev_flux}")
-
-        sims_success = {}
-        sims_failed = {}
-        for j in JOB_TYPES:
-            job_state = state["jobs_" + j]
-            sims_success[j], sims_failed[j] = self.job_trackers[j].restore(job_state, warm_restart)
-            LOGGER.info(self.job_trackers[j].__str__())
-
-        # if any jobs were found successful finished, need to queue for the next step!
-        for j in JOB_NEXT_QUEUE.keys():
-            fjobs = sims_success[j]
-            if len(fjobs) > 0:
-                LOGGER.info(f"Found {len(fjobs)} successful {j} sims!")
-                self.job_trackers[JOB_NEXT_QUEUE[j]].add_to_queue(fjobs)
-
-        LOGGER.info(
-            f"Restored WFManager from {state['ts']}. "
-            f"iterCounterWF = {self.iterCounterWF}, "
-            f"iterCounterPC = {self.iterCounterPC}, "
-            f"patchCounter = {self.patchCounter}"
-        )
-
     # ------------------------------------------------------------------------
     # Main tasks to be done by the wf manager
     # ------------------------------------------------------------------------
     def _task_add_new_patches_to_ml(self, lock_patch_io, lock_patch_select):
         if not self.do_patchselection:
-            LOGGER.debug(f"No patchselection as do_patchselection = {self.do_patchselection}")
+            LOGGER.debug(
+                f"No patchselection as do_patchselection = {self.do_patchselection}"
+            )
             return 0
         LOGGER.debug(f"Patch selection started")
 
@@ -240,11 +204,14 @@ class WorkflowManager:
 
         else:
             patch_ids = [
-                Naming.pfpatch(self.patchCounter + i) for i in range(self.nReadPatchesPerIter)
+                Naming.pfpatch(self.patchCounter + i)
+                for i in range(self.nReadPatchesPerIter)
             ]
 
             if not lock_patch_io.acquire(False):  # non-blocking acquire
-                LOGGER.debug("Failed to acquire lock on patches ({}, {})".format(p.name, p.pid))
+                LOGGER.debug(
+                    "Failed to acquire lock on patches ({}, {})".format(p.name, p.pid)
+                )
                 return 0
 
             LOGGER.debug("Acquired lock on patches ({}, {})".format(p.name, p.pid))
@@ -260,7 +227,9 @@ class WorkflowManager:
 
         LOGGER.debug("Acquiring lock on patch selector ({}, {})".format(p.name, p.pid))
         with lock_patch_select:
-            LOGGER.debug("Acquired lock on patch selector ({}, {})".format(p.name, p.pid))
+            LOGGER.debug(
+                "Acquired lock on patch selector ({}, {})".format(p.name, p.pid)
+            )
             self.pselector.add_candidates(patches)
         LOGGER.debug("Released lock on patch selector ({}, {})".format(p.name, p.pid))
 
@@ -303,7 +272,8 @@ class WorkflowManager:
             f"+ {self.job_trackers['createsim'].nrunning_sims()}"
         )
         nPatches = min(
-            self.nMaxSelectedPatchBuffer - nPendingPatches, self.nMaxPatchesSelectionsPerIter
+            self.nMaxSelectedPatchBuffer - nPendingPatches,
+            self.nMaxPatchesSelectionsPerIter,
         )
 
         LOGGER.debug(
@@ -318,10 +288,14 @@ class WorkflowManager:
         p = multiprocessing.current_process()
         LOGGER.debug("Acquiring lock on patch selector ({}, {})".format(p.name, p.pid))
         with lock_patch_select:
-            LOGGER.debug("Acquired lock on patch selector ({}, {})".format(p.name, p.pid))
+            LOGGER.debug(
+                "Acquired lock on patch selector ({}, {})".format(p.name, p.pid)
+            )
             LOGGER.info("Select {} new patches".format(nPatches))
             selections = self.pselector.select(nPatches)
-            LOGGER.debug("Released lock on patch selector ({}, {})".format(p.name, p.pid))
+            LOGGER.debug(
+                "Released lock on patch selector ({}, {})".format(p.name, p.pid)
+            )
 
         n = len(selections)
         if n == 0:
@@ -330,7 +304,9 @@ class WorkflowManager:
         # test these selections
         # Split a list of sims based on their status.
         # Returns: sims_success, sims_failed, sims_unknown
-        _s, _f, _u, _stop = self.job_trackers["createsim"].split_sims_on_status(selections)
+        _s, _f, _u, _stop = self.job_trackers["createsim"].split_sims_on_status(
+            selections
+        )
 
         # this is the correct scenario
         if len(_s) == 0 and len(_f) == 0:
@@ -372,7 +348,8 @@ class WorkflowManager:
             f"+ {self.job_trackers['createsim'].nrunning_sims()}"
         )
         nPatches = min(
-            self.nMaxSelectedPatchBuffer - nPendingPatches, self.nMaxPatchesSelectionsPerIter
+            self.nMaxSelectedPatchBuffer - nPendingPatches,
+            self.nMaxPatchesSelectionsPerIter,
         )
 
         LOGGER.info(
@@ -399,7 +376,11 @@ class WorkflowManager:
         selections = []
         try:
             selections = self.rpc_client.call(
-                {"k_samples": nPatches, "iteration_id": self.iterCounterMLServer, "strict": False}
+                {
+                    "k_samples": nPatches,
+                    "iteration_id": self.iterCounterMLServer,
+                    "strict": False,
+                }
             )
             if isinstance(selections, str):
                 LOGGER.error(f"[.] RPC server sent back an exception: {selections}")
@@ -475,7 +456,8 @@ class WorkflowManager:
             f"+ {self.job_trackers['createsim'].nrunning_sims()}"
         )
         nPatches = min(
-            self.nMaxSelectedPatchBuffer - nPendingPatches, self.nMaxPatchesSelectionsPerIter
+            self.nMaxSelectedPatchBuffer - nPendingPatches,
+            self.nMaxPatchesSelectionsPerIter,
         )
 
         LOGGER.info(
@@ -496,7 +478,11 @@ class WorkflowManager:
         selections = []
         try:
             selections = self.rpc_client.call(
-                {"k_samples": nPatches, "iteration_id": self.iterCounterUCGServer, "strict": False}
+                {
+                    "k_samples": nPatches,
+                    "iteration_id": self.iterCounterUCGServer,
+                    "strict": False,
+                }
             )
             if isinstance(selections, str):
                 LOGGER.error(f"[.] RPC server sent back an exception: {selections}")
@@ -572,7 +558,8 @@ class WorkflowManager:
         )
 
         nFrames = min(
-            self.nMaxSelectedCGFrameBuffer - nPendingFrames, self.nMaxCGFramesSelectionsPerIter
+            self.nMaxSelectedCGFrameBuffer - nPendingFrames,
+            self.nMaxCGFramesSelectionsPerIter,
         )
 
         LOGGER.debug(
@@ -597,7 +584,9 @@ class WorkflowManager:
         # test these selections
         # Split a list of sims based on their status.
         # Returns: sims_success, sims_failed, sims_unknown, sims_stop
-        _s, _f, _u, _ = self.job_trackers["backmapping"].split_sims_on_status(selections)
+        _s, _f, _u, _ = self.job_trackers["backmapping"].split_sims_on_status(
+            selections
+        )
 
         # this is the correct scenario
         if len(_s) == 0 and len(_f) == 0:
@@ -626,7 +615,9 @@ class WorkflowManager:
         # first, we will update job tracker
         for j in JOB_TYPES:
             succeeded[j], failed[j] = self.job_trackers[j].update()
-            LOGGER.debug(f"   JOB_TYPES={j} and self.job_trackers[{j}] = {self.job_trackers[j]}")
+            LOGGER.debug(
+                f"   JOB_TYPES={j} and self.job_trackers[{j}] = {self.job_trackers[j]}"
+            )
 
         LOGGER.debug("succeeded = {} and failed = {}".format(succeeded, failed))
 
@@ -647,7 +638,9 @@ class WorkflowManager:
         # finally, we will start any new jobs!
         LOGGER.debug(f"JOB_TYPES = {JOB_TYPES} started = {started}")
         for j in JOB_TYPES:
-            LOGGER.debug(f"   JOB_TYPES={j} and self.job_trackers[{j}] = {self.job_trackers[j]}")
+            LOGGER.debug(
+                f"   JOB_TYPES={j} and self.job_trackers[{j}] = {self.job_trackers[j]}"
+            )
             nJobs, started[j] = self.job_trackers[j].start_jobs(self.nMaxJobsPerIter)
             LOGGER.debug(f"   nJobs={nJobs}, started[{j}]={started[j]}")
 
@@ -656,142 +649,131 @@ class WorkflowManager:
         # return the dictionaries?
         return started, succeeded, failed
 
+    def generate_id(self):
+        """
+        Generate a job id
+        """
+        number = random.choice(range(0, 99999999))
+        jobid = self.prefix + str(number).zfill(9)
+        # This is hugely unlikely to happen, but you never know!
+        if jobid in self.trackers:
+            return self.generate_id()
+        return jobid
+
+    def init_state(self):
+        """
+        Look at the state of the cluster and initialize trackers to match it.
+        """
+        self.trackers = {}
+
+        # Determine current state of cluster, create state machine for each job
+        # Note this will return steps from across a single state machine. If job:
+        #    Successful (at the end) we have the result pushed
+        #    Failed we won't continue (and shouldn't make a state machine
+        #    Unknown (this shouldn't happen, let's show these)
+        #    Running: we assume previous steps successful
+        jobs = tracker.list_jobs_by_status()
+        print("TODO CHECK LOGIC FOR LIST JOBS BY STATUS")
+        import IPython
+
+        IPython.embed()
+
+        # Case 1: The step is running or queued. This means we mark
+        # All previous steps successful (assuming we cannot
+        # transition if this was not the case)
+        for job in jobs["running"] + jobs["queued"]:
+            jobid = job.metadata.labels.get(defaults.operator_label)
+            step_name = job.metadata.labels["app"]
+
+            # We cannot monitor a job that we didn't submit
+            # All jobs we submit have an id and step name
+            if not jobid or not step_name:
+                continue
+
+            # Get existing or new state machine for it
+            if jobid in self.trackers:
+                state_machine = self.trackers[jobid]
+            else:
+                state_machine = new_mummi_job(self.workflow, jobid)()
+            state_machine.mark_running(step_name)
+            self.trackers[jobid] = state_machine
+
+        # TODO we likely want some logic to cleanup failed
+        # But this might not always be desired
+
+    def init_jobs(self):
+        """
+        Init jobs creates new jobs to track based on space available.
+
+        This assumes that one sequence of steps takes up one cluster "slot"
+        and that we can submit up to a maximum number of slots. This works
+        well given that each job takes one node, but will need to be tweaked
+        if that is not the case. TLDR: this algorithm that can be improved upon.
+        """
+        # These start at "start" stage (is_started should be false)
+        # We will pack into the number nodes available
+        step = self.workflow.config_for_step(self.workflow.first_step)
+        nodes_needed = step.get("nnodes", 1)
+        submit_n = math.floor(self.workflow.max_size / nodes_needed)
+        for i in range(0, submit_n):
+            jobid = self.generate_id()
+
+            # Create a new state machine with job trackers, and change
+            # change goes into the first state (the first step to submit)
+            state_machine = new_mummi_job(self.workflow, jobid)()
+            state_machine.change()
+            self.trackers[jobid] = state_machine
+
     def start(self):
         """
         Start the workflow manager state machine.
 
-        This previously was run_workflow.
+        This previously was run_workflow. Simple algorithm to start:
+
+        1. Populate state machines that match current cluster.
+           One state machine is a sequence of jobs. We only care about
+           queued and running jobs. Any failure of a job will not continue
+           and we don't need to track or care about it (we should cleanup)
+        2. Submit new jobs up to a max allowed scaling size.
+           This coincides with new state machines, one per submit.
+        3. Monitor for changes by watching events.
         """
-        self.state_machine = self.state_machine_model()
+        # Each tracker is a state machine for one job sequence
+        # Here we assess the current state of the cluster (jobs)
+        # and fill the self.trackers lookup with state machines
+        self.init_state()
 
-        try:
-            # TODO need to sumit mlserver jobs
-            # this was previously sent like             selections = self.rpc_client.call({'k_samples': nPatches, 'iteration_id': self.iterCounterMLServer, 'strict': False}), just a number and then get back a simulation ID
-            # TODO need to implement this
-            self.restore()
+        # At this point, we have 1:1 mapping of state machines to job sequences
+        # We can now submit new simulations with the space we have. We assume
+        # each sequence gets one job running at once (one slot in the cluster)
+        # and can submit up to the max size. This algorithm can change.
+        self.init_jobs()
 
-            previously_ckpt_jobs = 0
-            for j in JOB_TYPES:
-                previously_ckpt_jobs += (
-                    self.job_trackers[j].nrunning_jobs() + self.job_trackers[j].nqueued_sims()
-                )
+        # Now we watch for changes.
+        self.watch()
 
-            if previously_ckpt_jobs == 0:
-                LOGGER.info(
-                    f"No previously checkpointed jobs found (={previously_ckpt_jobs}) in checkpoints, starting workflow"
-                )
-                self._wf_ready.set()
+    def watch(self):
+        """
+        Watch is an event driven means to watch for changes and update job states
+        accordingly.
+        """
+        print("TODO WATCH EVENTS")
+        import IPython
 
-            slp_time = 0
-            loop_timer = Timer()
-            while not self._exit.wait(slp_time):
-                LOGGER.info("Starting {} iteration {}".format(p.name, self.iterCounterWF))
-                LOGGER.profile("Starting {} iteration {}".format(p.name, self.iterCounterWF))
+        IPython.embed()
 
-                loop_timer.start()
+        # TODO we should have some kind of timeout that does not rely on an event
+        v1 = client.CoreV1Api()
+        batch_v1 = client.BatchV1Api()
+        w = watch.Watch()
+        for event in w.stream(
+            batch_v1.list_namespaced_job, namespace=tracker.get_namespace()
+        ):
+            job = event["object"]
+            print(event)
+            import IPython
 
-                # --------------------------------------------------------------
-                # in the restore phase, let's focus only on starting the jobs
-                if not self._wf_ready.is_set():
-                    njobs_remaining = 0
-                    for j in JOB_TYPES:
-                        self.job_trackers[j].start_jobs(self.nMaxJobsPerIter)
-                        njobs_remaining += self.job_trackers[j].njobs_2start()
-
-                    if njobs_remaining <= 0:
-                        LOGGER.info("Concluding restore phase")
-                        self._wf_ready.set()  # kick off other processes
-
-                # --------------------------------------------------------------
-                # otherwise, we need to do the regular tasks
-                else:
-                    # ----------------------------------------------------------
-                    # task 1: read new patches/cg frames and add to ML selectors
-                    # Option 1. using ML (Latent Space) server to generate and select patches
-                    self._task_add_new_patches_mlserver()
-                    # Option 2. Using UCG server to generate and select patches
-                    self._task_add_new_patches_ucgserver()
-                    # Option 3. Using PatchCreator with macro model to create patches (these patches will be selected below)
-                    self._task_add_new_patches_to_ml(lock_patch_io, lock_patch_select)
-
-                    LOGGER.profile(
-                        "    > Iteration {}: added new patches".format(self.iterCounterWF)
-                    )
-                    self._task_add_cgframes_to_ml()
-                    if self.do_cgselection:
-                        LOGGER.profile(
-                            "    > Iteration {}: added CG frame patches".format(self.iterCounterWF)
-                        )
-
-                    # ----------------------------------------------------------
-                    # 2021.02.07: HB moved this task up
-                    # task 2: start the jobs
-                    self._task_update_jobs()
-                    LOGGER.profile("    > Iteration {}: updated jobs".format(self.iterCounterWF))
-
-                    # ----------------------------------------------------------
-                    # task 3: select new candidates for simulations
-                    self._task_select_pfpatches(lock_patch_select)
-                    if self.do_patchselection:
-                        LOGGER.profile(
-                            "    > Iteration {}: selected patches".format(self.iterCounterWF)
-                        )
-
-                    self._task_select_cgframes()
-                    if self.do_cgselection:
-                        LOGGER.profile(
-                            "    > Iteration {}: select CG frames".format(self.iterCounterWF)
-                        )
-
-                    # ----------------------------------------------------------
-                    # validate state and checkpoint
-                    if self.do_patchselection:
-                        self.pselector.test()
-                        LOGGER.profile(
-                            "    > Iteration {}: patch selector test".format(self.iterCounterWF)
-                        )
-                    if self.do_cgselection:
-                        self.cgselector.test()
-                        LOGGER.profile(
-                            "    > Iteration {}: CG selector test".format(self.iterCounterWF)
-                        )
-
-                # --------------------------------------------------------------
-                for j in JOB_TYPES:
-                    self.job_trackers[j].test()
-                LOGGER.profile("    > Iteration {}: testing all jobs".format(self.iterCounterWF))
-                self.checkpoint()
-
-                # ------------------------------------------------------------------
-                LOGGER.info(
-                    "{} iteration {} finished: {} {}".format(
-                        p.name, self.iterCounterWF, self.is_exit(), self.is_error()
-                    )
-                )
-
-                # --------------------------------------------------------------
-                loop_time = loop_timer.elapsed()
-                self.iterCounterWF += 1
-
-                # slp_time = 0 # max(0, self.nSecPerIterWF - loop_time)
-                slp_time = max(0, self.nSecPerIterWF - loop_time)
-                LOGGER.debug("{} waiting for {} seconds".format(p.name, slp_time))
-
-            LOGGER.debug("AFTER LOOP: Workflow loop ending.")
-
-        # ----------------------------------------------------------------------
-        except Exception as e:
-            # self.exception_queue.put(sys.exc_info())
-            traceback.print_exc()
-            self.error()
-            self.exit()
-            raise e
-
-        # ----------------------------------------------------------------------
-        if self.is_error():
-            LOGGER.info("{} process is exiting due to error flag".format(p.name))
-        elif self.is_exit():
-            LOGGER.info("{} process is exiting due to exit flag".format(p.name))
+            IPython.embed()
 
     # --------------------------------------------------------------------------
     # patch creation task
@@ -808,8 +790,12 @@ class WorkflowManager:
             slp_time = 0
             loop_timer = Timer()
             while not self._exit.wait(slp_time):
-                LOGGER.info("Starting {} iteration {}".format(p.name, self.iterCounterPC))
-                LOGGER.profile("Starting {} iteration {}".format(p.name, self.iterCounterPC))
+                LOGGER.info(
+                    "Starting {} iteration {}".format(p.name, self.iterCounterPC)
+                )
+                LOGGER.profile(
+                    "Starting {} iteration {}".format(p.name, self.iterCounterPC)
+                )
 
                 loop_timer.start()
 
@@ -821,10 +807,16 @@ class WorkflowManager:
                 if len(patches) > 0:
                     # write them (use blocking acquire of lock)
                     with lock_patch_io:
-                        LOGGER.debug("Acquired lock on patches ({}, {})".format(p.name, p.pid))
-                        self.iointerface.save_patches(Naming.dir_root("patches"), patches)
+                        LOGGER.debug(
+                            "Acquired lock on patches ({}, {})".format(p.name, p.pid)
+                        )
+                        self.iointerface.save_patches(
+                            Naming.dir_root("patches"), patches
+                        )
                         self.patch_creator.checkpoint()
-                    LOGGER.debug("Released lock on patches ({}, {})".format(p.name, p.pid))
+                    LOGGER.debug(
+                        "Released lock on patches ({}, {})".format(p.name, p.pid)
+                    )
 
                 # --------------------------------------------------------------
                 LOGGER.info(
@@ -874,9 +866,15 @@ class WorkflowManager:
             slp_time = 0
             loopTimer = Timer()
             while not self._exit.wait(slp_time):
-                LOGGER.info("Starting {} iteration {}".format(p.name, self.iterCounterFB_cg2macro))
+                LOGGER.info(
+                    "Starting {} iteration {}".format(
+                        p.name, self.iterCounterFB_cg2macro
+                    )
+                )
                 LOGGER.profile(
-                    "Starting {} iteration {}".format(p.name, self.iterCounterFB_cg2macro)
+                    "Starting {} iteration {}".format(
+                        p.name, self.iterCounterFB_cg2macro
+                    )
                 )
                 loopTimer.start()
 
@@ -888,7 +886,10 @@ class WorkflowManager:
                 # --------------------------------------------------------------
                 LOGGER.info(
                     "{} iteration {} finished: {} {}".format(
-                        p.name, self.iterCounterFB_cg2macro, self.is_exit(), self.is_error()
+                        p.name,
+                        self.iterCounterFB_cg2macro,
+                        self.is_exit(),
+                        self.is_error(),
                     )
                 )
 

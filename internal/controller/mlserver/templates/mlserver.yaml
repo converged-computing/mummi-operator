@@ -3,7 +3,7 @@ config:
   jobname:       "mlserver"
   # 0 deactivate the memory logging (logging memory is slow)
   log_mem_usage: {{ .Spec.MLServer.Config.Logging.MemoryUsage }}
-  
+
   # # When stable, change to 2 (debug is 1)
   loglevel:      {{ .Spec.MLServer.Config.Logging.Level }}
 
@@ -67,10 +67,10 @@ sampler:
 
     # should default to db-feedback-sampling.npz
     # The feedback database used for sampling (createsims status and validation)
-    database: "{{ .Spec.MLServer.Sampler.Feedback.Database }}" 
+    database: "{{ .Spec.MLServer.Sampler.Feedback.Database }}"
     # Should default to db-feedback-frames.npz
     # The feedback database used for sampling  (feedback frames from cganalysis)
-    frame_database: "{{ .Spec.MLServer.Sampler.Feedback.FrameDatabase }}" 
+    frame_database: "{{ .Spec.MLServer.Sampler.Feedback.FrameDatabase }}"
 
   # This factor defines the number of extra structures we will generate
   # Example: if =2, we will select <= 2 * nMaxSelectedPatchBuffer structures

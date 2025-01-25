@@ -14,10 +14,10 @@
 
 import json
 import os
+from enum import Enum
 from itertools import count
 from logging import getLogger
 from typing import List
-from enum import Enum
 
 # These are added just for maestro and the custom adapter
 from maestrowf.abstracts.interfaces import SchedulerScriptAdapter
@@ -42,6 +42,7 @@ class SubmissionCode(Enum):
     OK = 0
     ERROR = 1
     CONFLICT = 2
+
 
 class CancelCode(Enum):
     OK = 0
@@ -449,7 +450,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
 
         # These options are required for the job to fail if the pod fails
         if step.run.get("retry_failure") in true_options:
-            spec.backoffLimit=0
+            spec.backoffLimit = 0
 
         return client.V1Job(
             api_version="batch/v1",

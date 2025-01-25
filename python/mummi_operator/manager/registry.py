@@ -1,9 +1,5 @@
 import os
-
-# This is a custom OCI registry that can be implemented by various components
-# to push / pull artifacts using the oras client https://oras.land.
-# It requires oras to be installed (pip install oras) and thus
-# should not be imported by default
+from logging import getLogger
 
 import oras.defaults
 import oras.oci
@@ -11,7 +7,12 @@ import oras.provider
 import oras.utils as utils
 from oras.decorator import ensure_container
 
-from logging import getLogger
+# This is a custom OCI registry that can be implemented by various components
+# to push / pull artifacts using the oras client https://oras.land.
+# It requires oras to be installed (pip install oras) and thus
+# should not be imported by default
+
+
 
 LOGGER = getLogger(__name__)
 

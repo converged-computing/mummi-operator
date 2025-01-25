@@ -35,10 +35,33 @@ mummi_workflow_config_schema = {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "config": {"type": "string"},
                 },
-                "required": ["name", "config"],
+                "required": ["config"],
             },
         },
+    },
+}
+
+mummi_job_schema = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://github.com/converged-computing/mummi_operator/tree/main/python/mummi_operator/schema.py",
+    "title": "mummi-job-01",
+    "description": "Mummi Job Config",
+    "type": "object",
+    "required": ["name", "config", "script", "image"],
+    "properties": {
+        "name": {"type": "string"},
+        "config": {"$ref": "#/definitions/config"},
+        "script": {"type": "string"},
+        "image": {"type": "string"},
+        "additionalProperties": False,
+    },
+    "definitions": {
+        "config": {
+            "type": "object",
+            "properties": {
+                "nnodes": {"type": "number", "default": 1},
+            },
+        }
     },
 }

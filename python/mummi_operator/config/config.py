@@ -1,13 +1,13 @@
 import importlib
 import os
 import random
-import sys
 import shutil
+import sys
+
+import jsonschema
 
 import mummi_operator.schema as schema
 import mummi_operator.utils as utils
-import jsonschema
-
 from mummi_operator import schema
 
 
@@ -86,15 +86,15 @@ class WorkflowConfig:
             raise ValueError("Workflow is missing job configs.")
 
         # As of Python 3.7, dictionaries are ordered
-        for job_config in self.cfg['jobs']:
+        for job_config in self.cfg["jobs"]:
             # This will fail if config is not found
             job = load_config(self.config_dir, job_config["config"])
-
-            # TODO: validate schema of job config here once done
-            if "job_type" not in job:
-                self.jobs[job["job_type"]] = job
-            else:
-                self.jobs[job_config["name"]] = job
+            jsonschema.validate(job, schema=schema.mummi_job_schema)
+            # Update the config to also have the name, so we can associate
+            # the name with the order.
+            job_config["name"] = job["name"]
+            job["config"]["name"] = job["name"]
+            self.jobs[job["name"]] = job
 
     def validate(self):
         jsonschema.validate(self.cfg, schema=schema.mummi_workflow_config_schema)

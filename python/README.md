@@ -35,16 +35,20 @@ jobs:
 A different design decision is packaging jobs as modular containers ([docker](docker)), which are defined for the workflow manager in [jobs](jobs). We build them from this context to add in the mummi-operator code.
 
 ```bash
+kind create cluster --config ./kind-config.yaml
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 633731392008.dkr.ecr.us-east-1.amazonaws.com
+
 docker build -f docker/mlrunner/Dockerfile -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner .
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner
+
 docker build -f docker/wfmanager/Dockerfile -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager .
+kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager
 ```
 
+This is how I'm testing. Note that for more customization we likely can use the operator.
+
 ```bash
-kind create cluster --config ../examples/kind-config.yaml
-kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager
-kubectl apply -f 
-kubectl apply -f wfmanager-deployment.yaml
+kubectl apply -f ./examples
 ```
 
 This has an added oras client (in Python) for pushing artifacts.

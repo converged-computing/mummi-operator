@@ -1,16 +1,18 @@
 import argparse
 import os
-import yaml
-import sys
-import signal
 import platform
+import signal
+import sys
 import traceback
-import mummi_operator.defaults as defaults
-from mummi_operator.logger import setup_logger
-from mummi_operator.client import get_subparser_helper
-from mummi_operator.config import load_config, load_workflow_config
+
+import yaml
 
 import mummi_operator
+import mummi_operator.defaults as defaults
+from mummi_operator.client import get_subparser_helper
+from mummi_operator.config import load_config, load_workflow_config
+from mummi_operator.logger import setup_logger
+
 from .manager import WorkflowManager
 
 
@@ -102,14 +104,13 @@ def main():
 
     # This is the workflow config that defines files for jobs
     workflow = load_workflow_config(args.config, args.config_dir, debug=args.debug)
-    wfconfig["workflow"] = workflow
 
     # Setup the logger
     setup_logger(quiet=args.quiet, debug=args.debug)
 
     # Create the workflow manager
     print(f"> Launching workflow manager on ({platform.node()})")
-    manager = WorkflowManager(wfconfig, scheduler=args.scheduler)
+    manager = WorkflowManager(wfconfig, scheduler=args.scheduler, workflow=workflow)
 
     # Placed outside for now to throw error
     manager.start()

@@ -72,7 +72,7 @@ script: |
     --mdrunopt " {{ if gt .Job.Config.Gpus 0 }}-nb gpu{{ end }} -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" 2>&1 | tee $outfile
 
   retval=$?
-  if [ $retval -eq 0 ] && [ -f /tmp/out/createsims.tar.gz ]; 
+  if [ $retval -eq 0 ] && [ -f /tmp/out/createsims.tar.gz ];
     then
       # Tar gz up the entire path (including createsims.tar.gz)
       cd $outpath
@@ -83,6 +83,6 @@ script: |
       # We don't want to trigger a cganalysis if the job fails
       echo "Simulation was not successful"
       exit 1
-  fi    
+  fi
   ls $outpath
   wait

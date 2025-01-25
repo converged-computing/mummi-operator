@@ -4,7 +4,7 @@ name: mlrunner
 # TODO vsoch: clean this out
 config:
   nnodes:     1
-  ngpus:      1
+  ngpus:      0
   log_mem_usage: 0       # 0 deactivate the memory logging (logging memory is slow)
   loglevel:      2       # When stable, change to 2 (debug is 1)
   logpath:       ''      # empty logpath will use ROOT/workspace
@@ -13,6 +13,9 @@ config:
   mini_mummi:    true    # Run with mini MuMMI settings
   flux: false            # disable flux
   use_oras: true         # push valid artifacts to an oras registry
+
+image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner
+namespace: default
 
 # E.g., oras push <host>/<uri>:<sample> --plain-http .
 oras:
@@ -27,7 +30,7 @@ workspace:
 # Auto-encoder (ML model) parameters
 encoder:
   path: /opt/clones/mummi_resources/ml
-  model: "chonky-model"  
+  model: "chonky-model"
   cg_positions: "CG_pos_data_summary_pos_dis_C1_v1.npz"
 
 sampler:
@@ -56,6 +59,9 @@ sampler:
   # This was 0.3 before, needs to be > 0.5 and less than 1 (original was 1.0)
   sub_sample_frac: 0.051
 
+  # Previously nMaxSelectedPatchBuffer in workflow manager
+  n_max_selected_patch_buffer: 5000
+
 generator:
   outpath:
     eval: mummi_ras.Naming.dir_root('ml')
@@ -72,3 +78,47 @@ validator:
   # For Campaign 1
   resources: "martini3-validator"
   complex: "ras-rbdcrd-ref-CG.gro"
+
+script: |
+    # This sources the pixi environment with our stuff
+    sleep infinity
+    . ~/.bash_profile
+    mummi_mlserver_nnodes=1
+
+    outpath=/tmp/out
+    registry="registry-0.mini-mummi.default.svc.cluster.local:5000"
+
+    MUMMI_APP=/opt/clones/mummi-ras
+    export MUMMI_ROOT=$MUMMI_APP
+    export MUMMI_RESOURCES=/opt/clones/mummi_resources
+    export MUMMI_APP
+    mlserver_cmd="mummi-ml start {% for jobid in jobids %}--jobid {{jobid}} {% endfor %} --config={{ configjson }} --outdir=${outpath}"
+
+    # This is where the mini-mummi configs for mummi-ras expect to find the model
+    mkdir -p /opt/clones/extract
+    cd /opt/clones/extract
+    tar -xzvf /opt/clones/model.tar.gz
+    extracted=$(ls /opt/clones/extract)
+    cd -
+    mv /opt/clones/extract/${extracted} /opt/clones/mummi_resources/ml/chonky-model
+
+    NUM_THREADS=$(nproc)
+    export OMP_NUM_THREADS=$NUM_THREADS
+    export KERAS_BACKEND='theano'
+    umask 007
+    mkdir -p $outpath
+    cd $outpath
+
+    echo
+    echo "(`hostname`: `date`) --> Launching ML Runner with $mummi_mlserver_nnodes nodes"
+    echo "   ML Server executable:   $mlserver_cmd"
+    echo "      Working directory:   `pwd`"
+    echo "                Threads:   $NUM_THREADS"
+    echo
+
+    python3 $MUMMI_APP/mummi_ras/scripts/create_organization.py
+    echo "$mlserver_cmd"
+    sleep infinity
+    $mlserver_cmd
+    retval=$?
+    exit $retval

@@ -78,9 +78,9 @@ echo "(`hostname`: `date`) --> Launching workflow"
 # Rabbit mq connection stuff
 # This gets the rabbitmq script if we need it (I didn't use it yet)
 # We could change to https and use port 15671 here instead
-# curl http://rabbitmq.mini-mummi.default.svc.cluster.local:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin  
+# curl http://rabbitmq.mini-mummi.default.svc.cluster.local:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin
 curl http://{{ .Mummi.RabbitHost }}:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin
-chmod +x /usr/local/bin/rabbitmqadmin  
+chmod +x /usr/local/bin/rabbitmqadmin
 
 # Create dummy credentials
 mkdir -p $MUMMI_ROOT/mlserver

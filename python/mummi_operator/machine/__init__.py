@@ -1,1 +1,1 @@
-from .machine import new_mummi_state_machine
+from .machine import new_mummi_job
