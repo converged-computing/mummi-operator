@@ -59,9 +59,6 @@ sampler:
   # This was 0.3 before, needs to be > 0.5 and less than 1 (original was 1.0)
   sub_sample_frac: 0.051
 
-  # Previously nMaxSelectedPatchBuffer in workflow manager
-  n_max_selected_patch_buffer: 5000
-
 generator:
   outpath:
     eval: mummi_ras.Naming.dir_root('ml')
@@ -81,7 +78,6 @@ validator:
 
 script: |
     # This sources the pixi environment with our stuff
-    sleep infinity
     . ~/.bash_profile
     mummi_mlserver_nnodes=1
 
@@ -118,7 +114,6 @@ script: |
 
     python3 $MUMMI_APP/mummi_ras/scripts/create_organization.py
     echo "$mlserver_cmd"
-    sleep infinity
     $mlserver_cmd
     retval=$?
     exit $retval

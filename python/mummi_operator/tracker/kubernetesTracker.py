@@ -3,21 +3,18 @@
 
 import json
 import os
-from itertools import count
 from logging import getLogger
-from typing import List
 
 from jinja2 import Template
+from kubernetes import client, config
 
 import mummi_operator.defaults as defaults
 
-from .state import failed_jobs, list_jobs, queued_jobs, running_jobs
 from .types import CancelCode, JobSetup, JobSubmission, SubmissionCode, true_options
 from .utils import convert_walltime_to_seconds
 
 LOGGER = getLogger(__name__)
 
-from kubernetes import client, config
 
 # This assumes the wfmanager running inside the cluster
 config.load_incluster_config()
@@ -69,8 +66,8 @@ class KubernetesJob:
         """
         try:
             self.delete_configmap(name)
-        except:
-            LOGGER.warning(f"Issue cleaning up {name}")
+        except Exception as e:
+            LOGGER.warning(f"Issue cleaning up {name}: {e}")
 
         # Use kubernetes API to cancel jobs (delete)
         batch_api = client.BatchV1Api()
@@ -229,7 +226,7 @@ class KubernetesJob:
 
         retcode = -1
         try:
-            result = batch_api.create_namespaced_job(self.namespace, job)
+            batch_api.create_namespaced_job(self.namespace, job)
             retcode = 0
             submit_status = SubmissionCode.OK
 
@@ -360,14 +357,12 @@ class KubernetesTracker:
         # it as a new submit (it will already be represented in the state)
         if submit_record.status == SubmissionCode.CONFLICT:
             LOGGER.error(
-                f"[{self.type}] Found already running {self.type} job (Conflict) for simname = {sim_name}"
+                f"[{self.type}] Found already running {self.type} job (Conflict) for job {jobid}"
             )
 
         # Allow it to fail and attempt cleanup
         elif not submit_record or submit_record.status != SubmissionCode.OK:
-            LOGGER.error(
-                f"[{self.type}] Failed to submit a {self.type} job for simname = {sim_name}"
-            )
+            LOGGER.error(f"[{self.type}] Failed to submit a {self.type} job for {jobid}")
             self.adapter.cleanup(step.name)
 
         else:

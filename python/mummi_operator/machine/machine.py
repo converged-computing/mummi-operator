@@ -1,9 +1,5 @@
-import math
-import random
-
 from statemachine import State, StateMachine
 from statemachine.factory import StateMachineMetaclass
-from statemachine.utils import run_async_from_sync
 
 import mummi_operator.tracker as tracker
 
@@ -70,6 +66,43 @@ def init_trackers(self):
             continue
         self.trackers[state_name] = tracker.KubernetesTracker(state_name, self.workflow)
 
+def is_running(self, state_name=None):
+    """
+    Check if a state is active (running job) (defaults to current)
+    """
+    state_name = state_name or state_machine.current_state.id
+    return state_name == state_machine.current_state.id
+
+def is_failed(self, state_name=None):
+    """
+    Check if a state is failed (defaults to current)
+    """
+    state_name = state_name or state_machine.current_state.id
+    return getattr(self, f"{state_name}_failure", False) is True
+
+def is_succeeded(self, state_name=None):
+    """
+    Check if a state is succeeded (defaults to current)
+    """
+    state_name = state_name or state_machine.current_state.id
+    return getattr(self, f"{state_name}_success", False) is True
+
+def mark_succeeded(self, state_name=None):
+    """
+    Mark the current state succeeded (default) or another specific state.
+    """
+    state_name = state_name or state_machine.current_state.id
+    setattr(self, f"{state_name}_success", True)
+
+def mark_failed(self, state_name=None):
+    """
+    Mark the current state failed (default) or another specific state.
+    """
+    print('MARK FAILED')
+    import IPython
+    IPython.embed()
+    state_name = state_name or state_machine.current_state.id
+    setattr(self, f"{state_name}_failure", True)
 
 def mark_running(self, running_state):
     """
@@ -85,7 +118,7 @@ def mark_running(self, running_state):
             return
         # If we get here, we have not hit the running state
         # We assume we completed previous states with success
-        setattr(self, f"{state}_success", True)
+        self.mark_succeeded(state)
 
 
 def on_change(self):
@@ -98,15 +131,15 @@ def on_change(self):
     print(f"Entering state {self.current_state.id}")
     # First check if this state already had success
     # If yes, we return early (and don't submit the job again)
-    if getattr(f"{self.current_state.id}_success", False) == True:
-         print(f"State {self.current_state.id} is marked as successful.")
-         return
+    if self.is_succeeded():
+        print(f"State {self.current_state.id} is marked as successful.")
+        return
 
     # If we failed, we also return. The required condition is not true so
     # it cannot cycle. We will want to remove these state machines.
-    if getattr(f"{self.current_state.id}_failed", False) == True:
-         print(f"State {self.current_state.id} is marked as failed.")
-         return
+    if self.is_failed():
+        print(f"State {self.current_state.id} is marked as failed.")
+        return
 
     # We haven't succeeded or failed - submit a new job!
     tracker = self.trackers[self.current_state.id]
@@ -120,14 +153,27 @@ def new_mummi_job(config, jobid):
     It's a dynamic state machine, so we start at the step that needs
     to be submit.
     """
-    states = {"start": {"initial": True, "final": False}, "complete": {"initial": False, "final" True}}
+    states = {
+        "start": {"initial": True, "final": False},
+        "complete": {"initial": False, "final": True},
+    }
     events = {"change": []}
 
     # Extra kwargs here are class functions and "on_enter_<state>" functions
     # TODO should we have on_enter_completed that deletes jobs?
     extra_kwargs = {
         "on_enter_start": on_enter_start,
+
+        # Actions to mark as running, succeeded, or failed
         "mark_running": mark_running,
+        "mark_succeeded": mark_succeeded,
+        "mark_failed": mark_failed,
+
+        # Booleans to check state
+        "is_failed": is_failed,
+        "is_succeeded": is_failed,
+        "is_running": is_running,
+
         "jobid": jobid,
         "init_trackers": init_trackers,
         "workflow": config,
@@ -164,7 +210,7 @@ def new_mummi_job(config, jobid):
 
     # A boolean to indicate the sample has failed at some step
     # We don't retry because we assume a bad starting data point
-    extra_kwargs['simulation_failed'] = False
+    extra_kwargs["simulation_failed"] = False
 
     # Add last state (completed) and transition to it
     states["complete"] = {"initial": False, "final": True}

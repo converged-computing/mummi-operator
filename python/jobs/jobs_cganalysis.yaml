@@ -9,17 +9,6 @@ config:
 image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis
 namespace: default
 
-#variables:
-#  simname: null # value supplied by jobTracker
-#  timestamp: null # value supplied by jobTracker
-#  outpath:
-#    eval: mummi_ras.Naming.dir_sim('cg', '{simname}')
-#  locpath:
-#    eval: mummi_ras.Naming.dir_local('cg/{simname}')
-#  fbpath:
-#    eval: mummi_ras.Naming.dir_root('feedback-cg')
-#  outfile: 'cg_analysis.out'
-
 script: |
   . ~/.bash_profile
   export OMPI_COMM_WORLD_RANK=1

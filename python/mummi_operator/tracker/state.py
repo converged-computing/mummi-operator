@@ -1,6 +1,9 @@
-LOGGER = getLogger(__name__)
+import os
+from logging import getLogger
 
 from kubernetes import client, config
+
+LOGGER = getLogger(__name__)
 
 # This assumes the wfmanager running inside the cluster
 config.load_incluster_config()
@@ -14,27 +17,30 @@ def list_jobs(namespace=None):
     batch_api = client.BatchV1Api()
     return batch_api.list_namespaced_job(namespace=namespace)
 
+
 def queued_jobs(namespace=None):
     """
     A queued job is not active and doesn't have a completion time.
     """
-    jobs = self.list_jobs(namespace)
+    jobs = list_jobs(namespace)
     return [
         x.metadata.name
         for x in jobs.items
         if x.status.completion_time is None and x.status.active == 0
     ]
 
+
 def running_jobs(namespace=None):
     """
     A running job is active and doesn't have a completion time.
     """
-    jobs = self.list_jobs(namespace)
+    jobs = list_jobs(namespace)
     return [
         x.metadata.name
         for x in jobs.items
         if x.status.completion_time is None and x.status.active == 1
     ]
+
 
 def get_namespace():
     """
@@ -46,41 +52,41 @@ def get_namespace():
             return f.read().strip()
 
 
-def list_jobs_by_status(self, label_name="app", label_value=None):
+def list_jobs_by_status(label_name="app", label_value=None):
     """
     Return a lookup of jobs by status
-    
+
     If label is provided, filter down to that
     """
-    jobs = self.adapter.list_jobs()
+    jobs = list_jobs()
 
     if label_name is not None and label_value is not None:
         jobs = [x for x in jobs.items if x.metadata.labels.get(label_name) == label_value]
 
     # These are the lists we will populate.
-    states = {"success": [], "failed": [], "running": [], "queued": [] "unknown": []}
+    states = {"success": [], "failed": [], "running": [], "queued": [], "unknown": []}
 
-    for job in jobs:
+    for job in jobs.items:
         # Success means we finished with succeeded condition
         if job.status.succeeded == 1 and job.status.completion_time is not None:
-            states['success'].append(job.metadata.name)
+            states["success"].append(job.metadata.name)
             continue
 
         # Failure means we finished with failed condition
         if job.status.failed == 1 and job.status.completion_time is not None:
-            states['failed'].append(job.metadata.name)
+            states["failed"].append(job.metadata.name)
             continue
 
         # Not active, and not finished is queued
         if not job.status.active and not job.status.completion_time:
-            states['queued'].append(job.metadata.name)
+            states["queued"].append(job.metadata.name)
             continue
 
         # Active, and not finished is running
         if job.status.active == 1 and not job.status.completion_time:
-            states['running'].append(job.metadata.name)
+            states["running"].append(job.metadata.name)
             continue
 
         # If it didn't fail or succeed, let it keep going to timeout (duration/walltime)
-        states['unknown'].append(job.metadata.name)
+        states["unknown"].append(job.metadata.name)
     return states

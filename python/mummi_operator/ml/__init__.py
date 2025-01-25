@@ -129,8 +129,9 @@ def main():
         print(mummi_operator.__version__)
         sys.exit(0)
 
-    # retrieve subparser (with help) from parser
-    helper = get_subparser_helper(args, parser)
+    # add subparser (with help) from parser
+    # We aren't using this and could remove
+    get_subparser_helper(args, parser)
 
     mummi_core.init()
     mummi_core.create_root()

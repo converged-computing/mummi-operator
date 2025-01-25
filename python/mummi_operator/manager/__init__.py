@@ -11,7 +11,6 @@ import mummi_operator
 import mummi_operator.defaults as defaults
 from mummi_operator.client import get_subparser_helper
 from mummi_operator.config import load_config, load_workflow_config
-from mummi_operator.logger import setup_logger
 
 from .manager import WorkflowManager
 
@@ -96,7 +95,8 @@ def main():
         sys.exit(0)
 
     # retrieve subparser (with help) from parser
-    helper = get_subparser_helper(args, parser)
+    # This is not currently used and can be removed
+    get_subparser_helper(args, parser)
 
     # Load workflow manager config
     wfconfig = load_config(args.config_dir, args.manager_config)
@@ -104,9 +104,6 @@ def main():
 
     # This is the workflow config that defines files for jobs
     workflow = load_workflow_config(args.config, args.config_dir, debug=args.debug)
-
-    # Setup the logger
-    setup_logger(quiet=args.quiet, debug=args.debug)
 
     # Create the workflow manager
     print(f"> Launching workflow manager on ({platform.node()})")
@@ -120,7 +117,7 @@ def main():
         pass
         # manager.start()
     except Exception as e:
-        LOGGER.error(f"Exiting due to error ({e})")
+        print(f"Exiting due to error ({e})")
         traceback.print_exc()
     finally:
         sys.exit(1)

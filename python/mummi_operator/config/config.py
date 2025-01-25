@@ -1,12 +1,8 @@
-import importlib
 import os
-import random
-import shutil
 import sys
 
 import jsonschema
 
-import mummi_operator.schema as schema
 import mummi_operator.utils as utils
 from mummi_operator import schema
 
@@ -15,12 +11,6 @@ def load_workflow_config(config_path, config_dir=None, debug=False, validate=Tru
     """
     Load the workflow config path, validating with the schema
     """
-    # On the fly debugging
-    if debug:
-        if "logging" not in cfg:
-            cfg["logging"] = {}
-        cfg["logging"]["debug"] = True
-
     workflow = WorkflowConfig(config_path, config_dir)
     if validate:
         workflow.validate()

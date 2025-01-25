@@ -168,18 +168,27 @@ eksctl delete cluster --config-file examples/eks-config-gpu-6.yaml --wait
 
 These are some design decisions I've made (of course open to discussion):
 
- - state is derived from Kubernetes, and not relying on some filesystem state
- - we assume jobs don't need to be paused / resumed / reclaimed like on HPC
- - internal: all of the controller logic, etc. should be internal
+### Initial Design
+
+ - State is derived from Kubernetes, and not relying on some filesystem state
+ - We assume jobs don't need to be paused / resumed / reclaimed like on HPC
+ - Internal: all of the controller logic, etc. should be internal
  - I'm trying to add kubernetes functionality in a way that doesn't disturb (change) core mummi. E.g., entrypoints and environment variables.
  - If/when the operator is deleted, jobs (createsim and cganalysis) are not. I think this might make sense if the orchestration needs update without destroying the jobs.
    - But discussion is needed, because if the registry is part of the mini mummi setup it will be deleted to.
    - But the job state can be re-discovered by a newly deployed operator
- - variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
- - instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
+ - Variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
+ - Instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
+
+### Refactored Design
+
+ - The model is a state machine
+ - There is no mummi logic (or code) required for the workflow manager.
+ - Each mummi job step is just a modular container for the state machine to use
 
 ### TODO
 
+- We will want to put license, etc in one spot at top of repo (not in individual files, which get dated)
 - Right now we base the max jobs and they include completed, we need to not account for those.
 - need a general way to add job parameters (e.g., stopsimtime)
 - We don't want wfmanager to come up before mlserver (need to add some ready condition)

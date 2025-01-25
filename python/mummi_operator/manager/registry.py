@@ -13,7 +13,6 @@ from oras.decorator import ensure_container
 # should not be imported by default
 
 
-
 LOGGER = getLogger(__name__)
 
 

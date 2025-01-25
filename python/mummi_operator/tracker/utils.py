@@ -1,10 +1,7 @@
 from logging import getLogger
+
 LOGGER = getLogger(__name__)
 
-from kubernetes import client, config
-
-# This assumes the wfmanager running inside the cluster
-config.load_incluster_config()
 
 def convert_walltime_to_seconds(walltime):
     """
