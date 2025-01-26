@@ -1,6 +1,7 @@
 name: mummi operator tag and release
 
 on:
+  pull_request: []
   workflow_dispatch:
     inputs:
       release_tag:
@@ -58,19 +59,15 @@ jobs:
       run: |
         echo "Tag for release is ${{ inputs.release_tag }}"
         echo "tag=${{ inputs.release_tag }}" >> ${GITHUB_ENV}
-    - name: Install
-      run: conda create --quiet --name fo twine
-    - name: Install dependencies
-      run: |
-        export PATH="/usr/share/miniconda/bin:$PATH"
-        source activate fo
-        pip install setuptools wheel twine
+
     - name: Build release manifests
       env:
         tag: ${{ env.tag }}
       run: |
         make build-config IMG=ghcr.io/converged-computing/mummi-operator:v${tag}
-    - name: Release Mummi Operator
+
+    - if: (github.event_name != 'pull_request')    
+      name: Release Mummi Operator
       uses: softprops/action-gh-release@v1
       with:
         name: Mummi Operator Release v${{ env.tag }}
