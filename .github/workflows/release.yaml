@@ -1,7 +1,6 @@
 name: mummi operator tag and release
 
 on:
-  pull_request: []
   workflow_dispatch:
     inputs:
       release_tag:
@@ -40,7 +39,8 @@ jobs:
         image=ghcr.io/converged-computing/mummi-operator:v${tag}
         make ${{ matrix.command }}-build IMG=${image}
 
-    - name: Deploy Container
+    - if: (github.event_name != 'pull_request')    
+      name: Deploy Container
       env:
         tag: ${{ env.tag }}
       run: |
@@ -63,8 +63,7 @@ jobs:
     - name: Build release manifests
       env:
         tag: ${{ env.tag }}
-      run: |
-        make build-config IMG=ghcr.io/converged-computing/mummi-operator:v${tag}
+      run: make build-config IMG=ghcr.io/converged-computing/mummi-operator:v${tag}
 
     - if: (github.event_name != 'pull_request')    
       name: Release Mummi Operator
