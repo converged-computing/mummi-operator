@@ -3,7 +3,7 @@ config:
   nnodes:     1
   nprocs:     1
   cores per task: 3 # 6 frontier / 3 summit / 5 on lassen (vsoch: this used to be 6 default)
-  ngpus:      1
+  ngpus:      0
 
 # container image for createsims (should be loaded into cluster)
 image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:cganalysis
@@ -63,8 +63,8 @@ script: |
                       --backend GROMACS_PARTS \
                       --simcores 6 \
                       --nprocs 1 \
-                      --stopsimtime 600 \
-                      --simruntime -1 \
+                      --stopsimtime 50 \
+                      --simruntime 0.1 \
                       --logstdout \
                       --loglevel 2 \
                       --mini \

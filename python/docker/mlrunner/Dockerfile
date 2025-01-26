@@ -17,10 +17,12 @@ RUN VERSION="1.2.2" && \
     mv oras-install/oras /usr/local/bin/ && \
     rm -rf oras_${VERSION}_*.tar.gz oras-install/
 
+RUN mv /opt/mummi-operator/docker/data/model-protein_latent_space-mini_mummi_ls-c2289_z32-t2024-10-01-23-33-17_h443704.tar.gz /opt/clones/model.tar.gz
+
 RUN . ~/.bash_profile && \
-    mv /opt/mummi-operator/docker/data/model-protein_latent_space-mini_mummi_ls-c2289_z32-t2024-10-01-23-33-17_h443704.tar.gz /opt/clones/model.tar.gz && \
     cd /opt/mummi-operator && \
     pixi run --manifest-path /pixi-env/pixi.toml pip install oras redis IPython && \
-    pixi run --manifest-path /pixi-env/pixi.toml pip install -e .
+    pixi run --manifest-path /pixi-env/pixi.toml pip install -e . && \
+    pixi run --manifest-path /pixi-env/pixi.toml pip install .
 
 # The new kubernetes start is provided via a jobs_mlrunner.yaml file

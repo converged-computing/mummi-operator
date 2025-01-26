@@ -23,4 +23,4 @@ spec:
         #args: ["/entrypoint.sh", "kube"]
         # This ensures we use the kind loaded image
         # remove if this isn't the case
-        imagePullPolicy: Never
+        imagePullPolicy: Always

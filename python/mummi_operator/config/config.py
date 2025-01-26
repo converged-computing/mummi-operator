@@ -3,6 +3,7 @@ import sys
 
 import jsonschema
 
+import mummi_operator.defaults as defaults
 import mummi_operator.utils as utils
 from mummi_operator import schema
 
@@ -92,6 +93,10 @@ class WorkflowConfig:
     @property
     def max_size(self):
         return self.cfg.get("cluster", {}).get("max_size")
+
+    @property
+    def completions_needed(self):
+        return self.cfg.get("workflow", {}).get("completions") or defaults.default_completions
 
     @property
     def first_step(self):

@@ -107,11 +107,13 @@ class KubernetesJob:
         """
         Generate the job CRD assuming the config map entrypoitn.
         """
+        step_name = self.job_desc["name"]
+        job_name = f"{step_name}-{configmap_name}"
         walltime = convert_walltime_to_seconds(step.walltime or 0)
-        metadata = client.V1ObjectMeta(name=configmap_name)
+        metadata = client.V1ObjectMeta(name=job_name)
 
         # Command should just execute entrypoint - keep it simple for now
-        command = ["/bin/bash", "/workdir/entrypoint.sh"]
+        command = self.config.get("command") or ["/bin/bash", "/workdir/entrypoint.sh"]
         ncores = (step.cores_per_task or 1) * step.nodes
 
         # Raise an exception if ncores is 0
@@ -182,7 +184,7 @@ class KubernetesJob:
         template = {
             "metadata": {
                 "labels": {
-                    "app": self.job_desc["name"],
+                    "app": step_name,
                     defaults.operator_label: jobid,
                 },
             },
@@ -195,13 +197,17 @@ class KubernetesJob:
         }
 
         # Do we want the job to terminate after failure?
-        spec = client.V1JobSpec(
-            parallelism=step.nodes, completions=step.nodes, suspend=False, template=template
-        )
-
-        # These options are required for the job to fail if the pod fails
+        backoff_limit = 0
         if self.config.get("retry_failure") in true_options:
-            spec.backoffLimit = 0
+            backoff_limit = 6
+
+        spec = client.V1JobSpec(
+            parallelism=step.nodes,
+            completions=step.nodes,
+            suspend=False,
+            template=template,
+            backoff_limit=backoff_limit,
+        )
 
         return client.V1Job(
             api_version="batch/v1",

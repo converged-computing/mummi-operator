@@ -58,35 +58,35 @@ def list_jobs_by_status(label_name="app", label_value=None):
 
     If label is provided, filter down to that
     """
-    jobs = list_jobs()
+    jobs = list_jobs().items
 
     if label_name is not None and label_value is not None:
-        jobs = [x for x in jobs.items if x.metadata.labels.get(label_name) == label_value]
+        jobs = [x for x in jobs if x.metadata.labels.get(label_name) == label_value]
 
     # These are the lists we will populate.
     states = {"success": [], "failed": [], "running": [], "queued": [], "unknown": []}
 
-    for job in jobs.items:
+    for job in jobs:
         # Success means we finished with succeeded condition
         if job.status.succeeded == 1 and job.status.completion_time is not None:
-            states["success"].append(job.metadata.name)
+            states["success"].append(job)
             continue
 
         # Failure means we finished with failed condition
         if job.status.failed == 1 and job.status.completion_time is not None:
-            states["failed"].append(job.metadata.name)
+            states["failed"].append(job)
             continue
 
         # Not active, and not finished is queued
         if not job.status.active and not job.status.completion_time:
-            states["queued"].append(job.metadata.name)
+            states["queued"].append(job)
             continue
 
         # Active, and not finished is running
         if job.status.active == 1 and not job.status.completion_time:
-            states["running"].append(job.metadata.name)
+            states["running"].append(job)
             continue
 
         # If it didn't fail or succeed, let it keep going to timeout (duration/walltime)
-        states["unknown"].append(job.metadata.name)
+        states["unknown"].append(job)
     return states

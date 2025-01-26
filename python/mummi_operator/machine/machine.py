@@ -66,43 +66,50 @@ def init_trackers(self):
             continue
         self.trackers[state_name] = tracker.KubernetesTracker(state_name, self.workflow)
 
+
 def is_running(self, state_name=None):
     """
     Check if a state is active (running job) (defaults to current)
     """
-    state_name = state_name or state_machine.current_state.id
-    return state_name == state_machine.current_state.id
+    state_name = state_name or self.current_state.id
+    return state_name == self.current_state.id
+
 
 def is_failed(self, state_name=None):
     """
     Check if a state is failed (defaults to current)
     """
-    state_name = state_name or state_machine.current_state.id
+    state_name = state_name or self.current_state.id
     return getattr(self, f"{state_name}_failure", False) is True
+
 
 def is_succeeded(self, state_name=None):
     """
     Check if a state is succeeded (defaults to current)
     """
-    state_name = state_name or state_machine.current_state.id
+    state_name = state_name or self.current_state.id
     return getattr(self, f"{state_name}_success", False) is True
+
 
 def mark_succeeded(self, state_name=None):
     """
     Mark the current state succeeded (default) or another specific state.
     """
-    state_name = state_name or state_machine.current_state.id
+    state_name = state_name or self.current_state.id
     setattr(self, f"{state_name}_success", True)
+
 
 def mark_failed(self, state_name=None):
     """
     Mark the current state failed (default) or another specific state.
     """
-    print('MARK FAILED')
+    print("MARK FAILED")
     import IPython
+
     IPython.embed()
-    state_name = state_name or state_machine.current_state.id
+    state_name = state_name or self.current_state.id
     setattr(self, f"{state_name}_failure", True)
+
 
 def mark_running(self, running_state):
     """
@@ -132,13 +139,19 @@ def on_change(self):
     # First check if this state already had success
     # If yes, we return early (and don't submit the job again)
     if self.is_succeeded():
-        print(f"State {self.current_state.id} is marked as successful.")
+        print(f"Stage {self.current_state.id} for job {self.jobid} is marked as successful.")
         return
 
     # If we failed, we also return. The required condition is not true so
     # it cannot cycle. We will want to remove these state machines.
     if self.is_failed():
-        print(f"State {self.current_state.id} is marked as failed.")
+        print(f"Stage {self.current_state.id} for job {self.jobid} is marked as failed.")
+        return
+
+    # We are completed, we don't submit a job but we complete the workflow
+    if self.current_state.id == "complete":
+        print(f"Job {self.jobid} is complete.")
+        self.is_complete = True
         return
 
     # We haven't succeeded or failed - submit a new job!
@@ -163,17 +176,15 @@ def new_mummi_job(config, jobid):
     # TODO should we have on_enter_completed that deletes jobs?
     extra_kwargs = {
         "on_enter_start": on_enter_start,
-
         # Actions to mark as running, succeeded, or failed
         "mark_running": mark_running,
         "mark_succeeded": mark_succeeded,
         "mark_failed": mark_failed,
-
         # Booleans to check state
         "is_failed": is_failed,
         "is_succeeded": is_failed,
         "is_running": is_running,
-
+        "is_complete": False,
         "jobid": jobid,
         "init_trackers": init_trackers,
         "workflow": config,

@@ -188,6 +188,7 @@ These are some design decisions I've made (of course open to discussion):
 
 ### TODO
 
+- We need a way to (on start) take into account jobs in progress (sequence) so we don't rnu new ones.
 - We will want to put license, etc in one spot at top of repo (not in individual files, which get dated)
 - Right now we base the max jobs and they include completed, we need to not account for those.
 - need a general way to add job parameters (e.g., stopsimtime)

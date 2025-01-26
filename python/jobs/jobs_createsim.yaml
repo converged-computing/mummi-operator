@@ -3,7 +3,7 @@ config:
   nnodes:         1
   nprocs:         1
   cores per task: 6
-  ngpus:          1
+  ngpus:          0
   walltime:       '0:45:00'
 
 # container image for createsims

@@ -1,4 +1,6 @@
 # mummi-workflow.yaml
+workflow:
+  completed: 4
 cluster:
   max_size: 6
   autoscale: False

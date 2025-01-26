@@ -5,15 +5,24 @@ mummi_workflow_config_schema = {
     "description": "Mummi Workflow Config",
     "type": "object",
     # The only required thing is jobs
-    "required": ["jobs"],
+    "required": ["jobs", "workflow"],
     "properties": {
         "jobs": {"$ref": "#/definitions/jobs"},
+        "workflow": {"$ref": "#/definitions/workflow"},
         "cluster": {"$ref": "#/definitions/cluster"},
         "logging": {"$ref": "#/definitions/logging"},
         "config_dir": {"type": "string"},
         "additionalProperties": False,
     },
     "definitions": {
+        "workflow": {
+            "type": "object",
+            "required": ["completed"],
+            "properties": {
+                "completed": {"type": "number", "default": 4},
+            },
+            "additionalProperties": False,
+        },
         "cluster": {
             "type": "object",
             "properties": {

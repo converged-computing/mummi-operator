@@ -13,6 +13,8 @@ config:
   mini_mummi:    true    # Run with mini MuMMI settings
   flux: false            # disable flux
   use_oras: true         # push valid artifacts to an oras registry
+  command: ['/root/.pixi/bin/pixi', 'run', "--manifest-path",
+            "/pixi-env/pixi.toml", "bash", '/workdir/entrypoint.sh']
 
 image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner
 namespace: default
@@ -112,7 +114,7 @@ script: |
     echo "                Threads:   $NUM_THREADS"
     echo
 
-    python3 $MUMMI_APP/mummi_ras/scripts/create_organization.py
+    python $MUMMI_APP/mummi_ras/scripts/create_organization.py
     echo "$mlserver_cmd"
     $mlserver_cmd
     retval=$?
