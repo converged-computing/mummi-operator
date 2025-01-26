@@ -73,7 +73,9 @@ def _latest_patch_id_generated(RPATH: str) -> int:
     write the patch X+1 safely without erasing any structures.
     """
     nsamples = len(glob.glob(RPATH + "/*.npz"))
-    nsamples = nsamples - 2  # the - 2 is to remove master_iterX.npz and table_all_predictions.npz
+    nsamples = (
+        nsamples - 2
+    )  # the - 2 is to remove master_iterX.npz and table_all_predictions.npz
     return max(nsamples, 0)  # to avoid returning a negative number if RPATH was empty
 
 
@@ -113,7 +115,9 @@ def checking_sampling_db(database: str, model_name: str) -> bool:
     prev_model_name = sampling_db["model_name"]
     if model_name != prev_model_name:
         LOGGER.error("Old sampling DB cannot be used with different ML model.")
-        LOGGER.error(f"This DB {database} has been created with ML model {prev_model_name}")
+        LOGGER.error(
+            f"This DB {database} has been created with ML model {prev_model_name}"
+        )
         LOGGER.error(f"You are currently used Latent Space {model_name}")
         return False
     return True
@@ -198,7 +202,9 @@ def update_sampling_db(
         with np.load(database_tmp, allow_pickle=True) as test:
             LOGGER.debug(f"{database_tmp} is valid {test.files}")
     except Exception:
-        LOGGER.warning(f"{database_tmp} seems to be corrupted. We keep the old {database} intact")
+        LOGGER.warning(
+            f"{database_tmp} seems to be corrupted. We keep the old {database} intact"
+        )
         return
 
     os.replace(database_tmp, database)
@@ -218,7 +224,9 @@ def create_sets(training_data_files: List[str]) -> List[List]:
         for label in state_labels:
             bary = data["labels"] == label
             if label in sets:
-                sets[label] = np.concatenate((sets[label], data["x_test_encoded"][bary]))
+                sets[label] = np.concatenate(
+                    (sets[label], data["x_test_encoded"][bary])
+                )
             else:
                 sets[label] = data["x_test_encoded"][bary]
 
@@ -256,7 +264,9 @@ class MLRunner:
         self.hostname = mummi_core.get_hostname(contract_hostname=False)
         # Could be process if we choose to activate feedback
         self.feedback = None
-        self.filelock = tempfile.mkstemp(prefix="mummi-sampling-", suffix=".lock", dir=None)[1]
+        self.filelock = tempfile.mkstemp(
+            prefix="mummi-sampling-", suffix=".lock", dir=None
+        )[1]
         # time between two checks for createsims status (in seconds)
         self.waittime = 180
         self.mini_mummi = False
@@ -267,11 +277,15 @@ class MLRunner:
 
     @property
     def sampling_db(self):
-        return os.path.join(self.database_dir, self.config["sampler"]["feedback"]["database"])
+        return os.path.join(
+            self.database_dir, self.config["sampler"]["feedback"]["database"]
+        )
 
     @property
     def feedbackframe_db(self):
-        return os.path.join(self.database_dir, self.config["sampler"]["feedback"]["frame_database"])
+        return os.path.join(
+            self.database_dir, self.config["sampler"]["feedback"]["frame_database"]
+        )
 
     @property
     def sampler_interpolator(self):
@@ -295,7 +309,9 @@ class MLRunner:
         self.do_feedback = bool(self.config["sampler"]["feedback"]["do_feedback"])
         self.mini_mummi = bool(self.config["config"].get("mini_mummi", False))
         if self.pickle_interpolator and os.path.isfile(self.pickle_interpolator):
-            self.logger.info(f"Pre-computed interpolator found: {self.pickle_interpolator}")
+            self.logger.info(
+                f"Pre-computed interpolator found: {self.pickle_interpolator}"
+            )
 
         self.logger.info("> Initializing MuMMI ML Runner")
         self.logger.info(f"  > Mini-Mummi                 {self.mini_mummi}")
@@ -363,7 +379,9 @@ class MLRunner:
             if not checking_sampling_db(feedback_db_path, self.encoder_path):
                 feedback_db_path = None
                 feedbackframe_db = None
-                LOGGER.warning(f"Feedback {feedback_db_path} is not valid for this ML model.")
+                LOGGER.warning(
+                    f"Feedback {feedback_db_path} is not valid for this ML model."
+                )
                 LOGGER.warning("All feedback is deactivated for this run.")
             else:
                 LOGGER.info(f"Feedback DB for sampling located in {feedback_db_path}")
@@ -386,7 +404,9 @@ class MLRunner:
                     f"Loaded pre-computed interpolator {self.pickle_interpolator} in {end:.03f} seconds for {self.interpolator.size()} LS points"
                 )
         else:
-            LOGGER.warning("Could not load pre-computed interpolator. Computing interpolator")
+            LOGGER.warning(
+                "Could not load pre-computed interpolator. Computing interpolator"
+            )
             interpolator = get_interpolator(self.sampler_interpolator)
             self.interpolator = interpolator(
                 states=states,
@@ -449,7 +469,11 @@ class MLRunner:
         """
         Run the mlserver to generate some number of samples.
         """
-        oras = self.config.get("oras") if self.config["config"].get("use_oras") is True else None
+        oras = (
+            self.config.get("oras")
+            if self.config["config"].get("use_oras") is True
+            else None
+        )
         LOGGER.info(f"Oras setup {oras}")
 
         # Generate new samples and push to registry
@@ -491,12 +515,16 @@ class MLRunner:
                 iteration_id=jobid,
                 new_positions=new_positions,
             )
-            LOGGER.debug(f"generated structures done. new_positions = {new_positions.shape}")
+            LOGGER.debug(
+                f"generated structures done. new_positions = {new_positions.shape}"
+            )
 
             # Our jobid looks like structure_<number> and we need to pass just the number here
             # This isn't great, but I don't want to copy over all the validator code
             iteration_id = int(jobid.replace("structure_", ""))
-            return_array = self.validator.validateArray(iteration_id, names_array, positions_array)
+            return_array = self.validator.validateArray(
+                iteration_id, names_array, positions_array
+            )
             is_valid = return_array[0][0]
 
             # if not valid, try again
@@ -509,7 +537,9 @@ class MLRunner:
                 return_array=return_array,
                 all_structure_names=names_array,
             )
-            valid_files = [os.path.join(self.validator.current_rpath, f) for f in valid_files]
+            valid_files = [
+                os.path.join(self.validator.current_rpath, f) for f in valid_files
+            ]
             LOGGER.debug(
                 f"mlrunner {jobid} => valid structures={[os.path.join(self.validator.current_rpath, f) for f in valid_files]}"
             )

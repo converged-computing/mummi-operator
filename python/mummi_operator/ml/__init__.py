@@ -11,7 +11,6 @@ import mummi_operator
 import mummi_operator.utils as utils
 from mummi_operator.client import get_subparser_helper
 from mummi_operator.config import load_config
-from mummi_operator.logger import setup_logger
 
 from .runner import MLRunner
 
@@ -23,7 +22,7 @@ def get_parser():
     )
     parser.add_argument(
         "--debug",
-        help="logger debug mode",
+        help="debug mode",
         default=False,
         action="store_true",
     )
