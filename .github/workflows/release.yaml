@@ -1,0 +1,82 @@
+name: mummi operator tag and release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Custom release tag
+        type: string
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        command: [docker]
+    name: make and build ${{ matrix.command }}
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    - uses: actions/setup-go@v3
+      with:
+        go-version: ^1.22
+    - name: Set tag
+      run: |
+        echo "Tag for release is ${{ inputs.release_tag }}"
+        echo "tag=${{ inputs.release_tag }}" >> ${GITHUB_ENV}
+    - name: GHCR Login
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build Container
+      env:
+        tag: ${{ env.tag }}
+      run: |
+        image=ghcr.io/converged-computing/mummi-operator:v${tag}
+        make ${{ matrix.command }}-build IMG=${image}
+
+    - name: Deploy Container
+      env:
+        tag: ${{ env.tag }}
+      run: |
+        image=ghcr.io/converged-computing/mummi-operator:v${tag}
+        make ${{ matrix.command }}-push IMG=${image}
+
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - uses: actions/setup-go@v3
+      with:
+        go-version: ^1.22
+    - name: Set tag
+      run: |
+        echo "Tag for release is ${{ inputs.release_tag }}"
+        echo "tag=${{ inputs.release_tag }}" >> ${GITHUB_ENV}
+    - name: Install
+      run: conda create --quiet --name fo twine
+    - name: Install dependencies
+      run: |
+        export PATH="/usr/share/miniconda/bin:$PATH"
+        source activate fo
+        pip install setuptools wheel twine
+    - name: Build release manifests
+      env:
+        tag: ${{ env.tag }}
+      run: |
+        make build-config IMG=ghcr.io/converged-computing/mummi-operator:v${tag}
+    - name: Release Mummi Operator
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Mummi Operator Release v${{ env.tag }}
+        tag_name: ${{ env.tag }}
+        generate_release_notes: true
+        files: |
+          examples/dist/mummi-operator.yaml
+      env:
+        GITHUB_REPOSITORY: converged-computing/mummi-operator
