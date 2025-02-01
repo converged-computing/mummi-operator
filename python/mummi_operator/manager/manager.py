@@ -4,6 +4,7 @@
 import logging
 import math
 import random
+import sys
 
 from kubernetes import client, config, watch
 
@@ -253,8 +254,6 @@ class WorkflowManager:
         Watch is an event driven means to watch for changes and update job states
         accordingly.
         """
-        # TODO we should have some kind of timeout that does not rely on an event
-        v1 = client.CoreV1Api()
         batch_v1 = client.BatchV1Api()
         w = watch.Watch()
         for event in w.stream(batch_v1.list_namespaced_job, namespace=tracker.get_namespace()):

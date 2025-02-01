@@ -256,8 +256,18 @@ class MLRunner:
     Intended to be run as a job.
     """
 
-    def __init__(self, config: dict, ids, outdir: str) -> None:
+    def __init__(
+        self,
+        config: dict,
+        ids,
+        outdir: str,
+        registry=None,
+        tag=None,
+        plain_http=True,
+        tls_verify=False,
+    ) -> None:
         self.config = config
+        self.set_oras(registry, tag, plain_http, tls_verify)
         self.logger = LOGGER
         self.outdir = outdir
         self.ids = ids
@@ -269,7 +279,19 @@ class MLRunner:
         )[1]
         # time between two checks for createsims status (in seconds)
         self.waittime = 180
-        self.mini_mummi = False
+        self.mini_mummi = True
+
+    def set_oras(self, registry, tag, plain_http=False, tls_verify=False):
+        """
+        Set oras into config
+        """
+        self.config["oras"] = {}
+        if not registry:
+            return
+        self.config["oras"]["host"] = registry
+        self.config["oras"]["tag"] = tag or "mlrunner"
+        self.config["oras"]["tls_verify"] = tls_verify
+        self.config["oras"]["plain_http"] = plain_http
 
     @property
     def database_dir(self):
@@ -307,7 +329,6 @@ class MLRunner:
         self.logger.info(f"ML Server launched on host: {self.hostname}")
         os.makedirs(self.database_dir, exist_ok=True)
         self.do_feedback = bool(self.config["sampler"]["feedback"]["do_feedback"])
-        self.mini_mummi = bool(self.config["config"].get("mini_mummi", False))
         if self.pickle_interpolator and os.path.isfile(self.pickle_interpolator):
             self.logger.info(
                 f"Pre-computed interpolator found: {self.pickle_interpolator}"
@@ -469,22 +490,24 @@ class MLRunner:
         """
         Run the mlserver to generate some number of samples.
         """
-        oras = (
-            self.config.get("oras")
-            if self.config["config"].get("use_oras") is True
-            else None
-        )
-        LOGGER.info(f"Oras setup {oras}")
+        oras = self.config.get("oras") or {}
+        if oras:
+            LOGGER.info(f"Oras setup {oras}")
+        else:
+            LOGGER.info("No Oras setup found - artifacts will not be pushed")
 
         # Generate new samples and push to registry
         for jobid in self.ids:
             sample = self.generate_new_sample(jobid)
+            if not oras:
+                continue
             push_artifact(
                 sample[0],
                 name=jobid,
-                host=oras["host"],
-                tls_verify=oras["tls_verify"],
-                plain_http=oras["plain_http"],
+                host=oras.get("host"),
+                tag=oras.get("tag"),
+                tls_verify=oras.get("tls_verify"),
+                plain_http=oras.get("plain_http"),
             )
 
     def generate_new_sample(self, jobid):
@@ -521,7 +544,7 @@ class MLRunner:
 
             # Our jobid looks like structure_<number> and we need to pass just the number here
             # This isn't great, but I don't want to copy over all the validator code
-            iteration_id = int(jobid.replace("structure_", ""))
+            iteration_id = int(jobid.split("_")[-1])
             return_array = self.validator.validateArray(
                 iteration_id, names_array, positions_array
             )
@@ -549,7 +572,7 @@ class MLRunner:
         return valid_files
 
 
-def push_artifact(path, name, host, tls_verify=None, plain_http=None):
+def push_artifact(path, name, tag, host, tls_verify=None, plain_http=None):
     """
     Push a named artifact to an OCI compliant registry
     """
@@ -561,6 +584,6 @@ def push_artifact(path, name, host, tls_verify=None, plain_http=None):
 
     # Push to a URI that is cleaned / parsed.
     # registry-0.mini-mummi.default.svc.cluster.local:5000/structure_iter00_000000000388:latest
-    uri = registry.generate_uri(host, name=name)
+    uri = registry.generate_uri(host, name=name, tag=tag)
     LOGGER.info(f"Request to push {path} to oras registry {uri}")
     artifact.push(uri, tls_verify=tls_verify, plain_http=plain_http)

@@ -23,9 +23,9 @@ cluster:
   autoscale: False
 jobs:
   - name: mlserver
-    config mlserver.yaml
+    config: mlserver.yaml
   - name: createsim
-    config jobs_createsim.yaml
+    config: jobs_createsim.yaml
   - name: cganalysis
     config: jobs_cganalysis.yaml
 ```

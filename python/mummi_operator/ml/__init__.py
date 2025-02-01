@@ -64,6 +64,26 @@ def get_parser():
         help="Sample identifiers",
         action="append",
     )
+    start.add_argument(
+        "--tag",
+        help="Tag to push to",
+    )
+    start.add_argument(
+        "--registry",
+        help="Registry to push to",
+    )
+    start.add_argument(
+        "--plain-http",
+        help="Use plain http for push.",
+        default=False,
+        action="store_true",
+    )
+    start.add_argument(
+        "--tls-verify",
+        help="Use tls verify for push.",
+        default=False,
+        action="store_true",
+    )
     return parser
 
 
@@ -73,7 +93,7 @@ def load_mlrunner_config(config_file):
     """
     if not os.path.exists(config_file):
         raise ValueError(f"Config {config_file} does not exist.")
-    config = utils.read_json(config_file)
+    config = utils.read_yaml(config_file)
     if config.get("encoder") is None or config["encoder"].get("path") is None:
         raise ValueError("No encoder specified")
     if config.get("workspace") is None or config["workspace"].get("path") is None:
@@ -137,7 +157,15 @@ def main():
 
     config = load_mlrunner_config(args.config)
     try:
-        runner = MLRunner(config=config, ids=args.jobid, outdir=args.outdir)
+        runner = MLRunner(
+            config=config,
+            ids=args.jobid,
+            outdir=args.outdir,
+            registry=args.registry,
+            tag=args.tag,
+            plain_http=args.plain_http,
+            tls_verify=args.tls_verify,
+        )
         runner.setup()
         runner.run()
     except Exception as e:
