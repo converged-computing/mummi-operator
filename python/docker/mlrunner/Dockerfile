@@ -2,7 +2,7 @@ ARG tag="ml-ucg-cpu-rocky-11-28-2024"
 FROM 633731392008.dkr.ecr.us-east-1.amazonaws.com/dinosaur-de-la-noche:${tag}
 
 COPY ./ /opt/mummi-operator
-RUN yum update -y && yum install -y vim && \
+RUN yum update -y && yum install -y vim rsync && \
     . ~/.bash_profile && \
     rm -rf /opt/clones && \
     mv /opt/mummi-operator/docker/clones /opt/clones && \

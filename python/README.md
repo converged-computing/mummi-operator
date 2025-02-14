@@ -39,7 +39,10 @@ kind create cluster --config ./kind-config.yaml
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 633731392008.dkr.ecr.us-east-1.amazonaws.com
 
 docker build -f docker/mlrunner/Dockerfile -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner .
-kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner
+# kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner
+
+docker build -f docker/mlrunner/Dockerfile.gpu -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner-gpu .
+# kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:mlrunner-gpu
 
 docker build -f docker/wfmanager/Dockerfile -t 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager .
 kind load docker-image 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:manager

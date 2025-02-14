@@ -6,20 +6,18 @@ import logging
 import os
 import pathlib
 import pickle
-import tempfile
+import platform
 import time
 from logging import getLogger
 from typing import Any, List, Union
 
-import mummi_core
 import numpy as np
 from mummi_ras import Naming
 from mummi_ras.ml import ls_point as lsp
-from mummi_ras.ml.autoencoders import FullDenseAutoencoder, FullMiniDenseAutoencoder
+from mummi_ras.ml.autoencoders import FullMiniDenseAutoencoder
+from mummi_ras.ml.feedback_frames import FeedbackFrames
 from mummi_ras.ml.samplers import get_interpolator, ls_sampler
 from mummi_ras.ml.validators import CGValidator
-
-import mummi_operator.manager.registry as registry
 
 # Print debug for now
 logging.basicConfig()
@@ -123,96 +121,6 @@ def checking_sampling_db(database: str, model_name: str) -> bool:
     return True
 
 
-def update_sampling_db(
-    database: str,
-    num_new_sample: int,
-    model_name: str,
-    structure_names: List[str],
-    ls_coords: List[List[float]] = [],
-    lambda_values: List[float] = [],
-    validation_status: List[bool] = [],
-    new_createsims_status: List[bool] = [],
-):
-    """
-    Update sampling feeback DB with new samples.
-    """
-
-    # File we will be writing (just in case to not corrupt the file in case of interruption)
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    db_path = os.path.splitext(database)
-    database_tmp = f"{db_path[0]}-{timestr}{db_path[1]}"
-
-    if not os.path.isfile(database):
-        create_sampling_db(database, model_name)
-
-    try:
-        with np.load(database, allow_pickle=True) as sampling_db:
-            prev_model_name = sampling_db["model_name"]
-            created_at = sampling_db["created_at"]
-            prev_struct = sampling_db["structure_names"]
-            prev_coords = sampling_db["ls_coords"]
-            prev_lambda = sampling_db["lambda_values"]
-            prev_validation = sampling_db["validation_status"]
-            prev_createsims = sampling_db["createsims_status"]
-    except Exception as e:
-        LOGGER.error(f"{database} {e}")
-        return
-
-    new_records = len(structure_names)
-    ts = datetime.datetime.now().strftime("%d.%m.%Y-%H:%M:%S")
-    if model_name != prev_model_name:
-        LOGGER.error("Old sampling DB cannot be used with different ML model.")
-        LOGGER.error(f"This DB {database} has been created for LS coordinates of LS:")
-        LOGGER.error(f" - {prev_model_name}")
-        LOGGER.error(f"You are currently used Latent Space {model_name}")
-        LOGGER.error("Feedback is deactivated.")
-        return
-
-    data = {"model_name": model_name, "created_at": created_at, "updated_at": ts}
-
-    # Update sampling DB for feedback
-    data["structure_names"] = np.append(prev_struct, structure_names)
-    if ls_coords != []:
-        if len(prev_coords) > 0:
-            data["ls_coords"] = np.append(prev_coords, ls_coords, axis=0)
-        else:
-            data["ls_coords"] = ls_coords
-    else:
-        data["ls_coords"] = prev_coords
-    if lambda_values != []:
-        data["lambda_values"] = np.append(prev_lambda, lambda_values)
-    else:
-        data["lambda_values"] = prev_lambda
-    if validation_status != []:
-        data["validation_status"] = np.append(prev_validation, validation_status)
-    else:
-        data["validation_status"] = prev_validation
-    # 0 means False, 1 True and 2 is unknown state for createsims
-    # As no createsims for these structures are running, they are all unknowns
-    if new_createsims_status != []:
-        data["createsims_status"] = new_createsims_status
-    else:
-        data["createsims_status"] = np.append(
-            prev_createsims, np.full(num_new_sample, 2, dtype=int)
-        )
-
-    np.savez_compressed(database_tmp, **data)
-    # We make sure the new file is not corrupted somehow
-    try:
-        with np.load(database_tmp, allow_pickle=True) as test:
-            LOGGER.debug(f"{database_tmp} is valid {test.files}")
-    except Exception:
-        LOGGER.warning(
-            f"{database_tmp} seems to be corrupted. We keep the old {database} intact"
-        )
-        return
-
-    os.replace(database_tmp, database)
-
-    LOGGER.debug(f"Added new structures: {structure_names}")
-    LOGGER.info(f"Upgraded DB at {database} with {new_records} new records")
-
-
 def create_sets(training_data_files: List[str]) -> List[List]:
     sets = {}
     assert len(list(training_data_files)) != 0
@@ -253,82 +161,59 @@ class MLRunner:
     """
     ML runner implementation for Mummi Operator
 
-    Intended to be run as a job.
+    Intended to be run as a job. Note that the init doesn't have the best design to
+    require a custom data structure "config," however the only use case is from the
+    client here that prepares it, so it is OK for now.
     """
 
-    def __init__(
-        self,
-        config: dict,
-        ids,
-        outdir: str,
-        registry=None,
-        tag=None,
-        plain_http=True,
-        tls_verify=False,
-    ) -> None:
-        self.config = config
-        self.set_oras(registry, tag, plain_http, tls_verify)
+    def __init__(self, args) -> None:
+        self.args = args
+        self.args.tag = self.args.tag or "mlrunner"
         self.logger = LOGGER
-        self.outdir = outdir
-        self.ids = ids
-        self.hostname = mummi_core.get_hostname(contract_hostname=False)
-        # Could be process if we choose to activate feedback
-        self.feedback = None
-        self.filelock = tempfile.mkstemp(
-            prefix="mummi-sampling-", suffix=".lock", dir=None
-        )[1]
-        # time between two checks for createsims status (in seconds)
-        self.waittime = 180
+        # The MLRunner is currently designed for Mini Mummi
         self.mini_mummi = True
-
-    def set_oras(self, registry, tag, plain_http=False, tls_verify=False):
-        """
-        Set oras into config
-        """
-        self.config["oras"] = {}
-        if not registry:
-            return
-        self.config["oras"]["host"] = registry
-        self.config["oras"]["tag"] = tag or "mlrunner"
-        self.config["oras"]["tls_verify"] = tls_verify
-        self.config["oras"]["plain_http"] = plain_http
 
     @property
     def database_dir(self):
-        return os.path.join(self.config["sampler"]["outpath"], "feedback")
+        return os.path.join(self.args.ml_outdir, "feedback")
 
     @property
     def sampling_db(self):
-        return os.path.join(
-            self.database_dir, self.config["sampler"]["feedback"]["database"]
-        )
+        return os.path.join(self.database_dir, "db-feedback-sampling.npz")
 
     @property
     def feedbackframe_db(self):
-        return os.path.join(
-            self.database_dir, self.config["sampler"]["feedback"]["frame_database"]
-        )
-
-    @property
-    def sampler_interpolator(self):
-        return self.config["sampler"]["interpolator"]
+        return os.path.join(self.database_dir, "db-feedback-frames.npz")
 
     @property
     def pickle_interpolator(self):
-        return self.config["sampler"].get("pre_computed")
+        return getattr(self.args, "pre_computed", "")
+
+    @property
+    def do_feedback(self):
+        return self.args.feedback
 
     @property
     def encoder_name(self):
-        return self.config["encoder"]["model"]
+        """
+        The encoder model name is directory the encoder path is in
+
+        E.g., below, we want to return "chonky-model"
+        /opt/clones/mummi_resources/ml/chonky-model/CG_pos_data_summary_pos_dis_C1_v1.npz
+        /opt/clones/mummi_resources/ml/<encoder-name>/<encoder-model>
+        """
+        return os.path.basename(self.encoder_path)
 
     @property
     def encoder_path(self):
-        return os.path.join(self.config["encoder"]["path"], self.encoder_name)
+        """
+        Directory the model is in.
+        """
+        return os.path.dirname(self.args.encoder_model)
 
     def read_specs(self):
-        self.logger.info(f"ML Server launched on host: {self.hostname}")
+        self.logger.info(f"ML Server launched on host: {platform.node()}")
         os.makedirs(self.database_dir, exist_ok=True)
-        self.do_feedback = bool(self.config["sampler"]["feedback"]["do_feedback"])
         if self.pickle_interpolator and os.path.isfile(self.pickle_interpolator):
             self.logger.info(
                 f"Pre-computed interpolator found: {self.pickle_interpolator}"
@@ -337,7 +222,7 @@ class MLRunner:
         self.logger.info("> Initializing MuMMI ML Runner")
         self.logger.info(f"  > Mini-Mummi                 {self.mini_mummi}")
         self.logger.info("  > Sampler")
-        self.logger.info(f"    > Interpolator             {self.sampler_interpolator}")
+        self.logger.info(f"    > Interpolator             {self.args.interpolator}")
         self.logger.info(f"    > Run with feedback        {self.do_feedback}")
         self.logger.info(f"    > Createsims Feedback DB   {self.sampling_db}")
         self.logger.info(f"    > CG frames Feedback DB    {self.feedbackframe_db}")
@@ -354,15 +239,9 @@ class MLRunner:
         LOGGER.info(f"Training data {training_dir} => {len(training_data)} files")
         states = create_sets(training_data)
 
-        if self.mini_mummi:
-            # Only two states in mini MuMMI
-            states = states[:2]
-        else:
-            # states 4 and 5 are not useful for know (A''' and unknown state)
-            states = states[:3]
-
-        sub_sample_frac = float(self.config["sampler"]["sub_sample_frac"])
-        assert 0.001 < sub_sample_frac <= 1
+        # Only two states in mini MuMMI
+        states = states[:2]
+        assert 0.001 < self.args.sub_sample_frac <= 1
 
         # Needed for OTInterpolator because size of sets must be equals
         min_size = len(states[0])
@@ -370,7 +249,7 @@ class MLRunner:
             if min_size > len(s):
                 min_size = len(s)
 
-        mask = np.random.uniform(size=(min_size,)) <= sub_sample_frac
+        mask = np.random.uniform(size=(min_size,)) <= self.args.sub_sample_frac
         for i in range(len(states)):
             if len(states[i]) > min_size:
                 states[i] = states[i][:min_size]
@@ -428,17 +307,17 @@ class MLRunner:
             LOGGER.warning(
                 "Could not load pre-computed interpolator. Computing interpolator"
             )
-            interpolator = get_interpolator(self.sampler_interpolator)
+            interpolator = get_interpolator(self.args.interpolator)
             self.interpolator = interpolator(
                 states=states,
-                kneigh=int(self.config["sampler"].get("kneighbors", 10)),
-                lowerbound=float(self.config["sampler"]["lambda_lowerbound"]),
-                upperbound=float(self.config["sampler"]["lambda_upperbound"]),
-                num_iter_max=int(self.config["sampler"].get("num_iter_max", 1000000)),
+                kneigh=self.args.kneighbors,
+                lowerbound=self.args.lambda_lowerbound,
+                upperbound=self.args.lambda_upperbound,
+                num_iter_max=self.args.max_iterations,
             )
             end = time.time() - start
             LOGGER.info(
-                f"Interpolator {self.sampler_interpolator} created in {end:.03f} seconds for {self.interpolator.size()} LS points"
+                f"Interpolator {self.args.interpolator} created in {end:.03f} seconds for {self.interpolator.size()} LS points"
             )
 
         return ls_sampler.LSSampler(
@@ -449,28 +328,16 @@ class MLRunner:
         )
 
     def setup_generator(self):
-        if self.mini_mummi:
-            return FullMiniDenseAutoencoder(model_path=self.encoder_path)
-        else:
-            return FullDenseAutoencoder(model_path=self.encoder_path)
-            # @TODO add code to swtich between encoders
-            # generator = HierarchicalCGAutoencoder(
-            #     model_path = model_path
-            # )
+        return FullMiniDenseAutoencoder(model_path=self.encoder_path)
 
     def setup_validator(self):
-        resource_name = self.config["validator"]["resources"]
-        complex_name = self.config["validator"]["complex"]
-        healing = bool(self.config["validator"]["healing"])
-        cleanup = bool(self.config["validator"]["cleanup"])
-        resource_path = Naming.dir_res(resource_name)
-
+        resource_path = Naming.dir_res(self.args.resources)
         return CGValidator(
-            iteration_path=self.outdir,
+            iteration_path=self.args.outdir,
             resource_path=resource_path,
-            complex_name=complex_name,
-            healing=healing,
-            cleanup=cleanup,
+            complex_name=self.args.complex,
+            healing=not self.args.no_healing,
+            cleanup=not self.args.no_cleanup,
             mini_mummi=self.mini_mummi,
         )
 
@@ -482,32 +349,42 @@ class MLRunner:
         self.sampler = None
         self.generator = self.setup_generator()
         self.validator = self.setup_validator()
-        # # Will gather result
+
+        # This will report that the feedback database is empty...
         self.sampler = self.setup_sampler()
-        # TODO the feedback would be here.
+
+        # Are we doing feedback? If yes, load into model database
+        if self.do_feedback:
+            feed_path = Naming.dir_root("feedback-cg")
+            model = FullMiniDenseAutoencoder(
+                model_path=self.encoder_path, device=self.args.device
+            )
+            self.feedback_frames = FeedbackFrames(
+                database=self.feedbackframe_db,
+                path=feed_path,
+                model=model,
+                model_name=self.encoder_path,
+            )
 
     def run(self) -> None:
         """
         Run the mlserver to generate some number of samples.
         """
-        oras = self.config.get("oras") or {}
-        if oras:
-            LOGGER.info(f"Oras setup {oras}")
-        else:
-            LOGGER.info("No Oras setup found - artifacts will not be pushed")
-
         # Generate new samples and push to registry
-        for jobid in self.ids:
+        for jobid in self.args.jobid:
+            if self.do_feedback:
+                self.feedback_frames.work()
             sample = self.generate_new_sample(jobid)
-            if not oras:
+            # Skip pushing to oras if no registry provided
+            if not self.args.registry:
                 continue
             push_artifact(
                 sample[0],
                 name=jobid,
-                host=oras.get("host"),
-                tag=oras.get("tag"),
-                tls_verify=oras.get("tls_verify"),
-                plain_http=oras.get("plain_http"),
+                host=self.args.registry or None,
+                tag=self.args.tag,
+                tls_verify=self.args.tls_verify,
+                plain_http=self.args.plain_http,
             )
 
     def generate_new_sample(self, jobid):
@@ -534,7 +411,7 @@ class MLRunner:
 
             new_positions = self.generator.decode(ls_coords)
             names_array, positions_array = write_patches(
-                outpath=self.config["generator"]["outpath"],
+                outpath=self.args.ml_outdir,
                 iteration_id=jobid,
                 new_positions=new_positions,
             )
@@ -576,6 +453,8 @@ def push_artifact(path, name, tag, host, tls_verify=None, plain_http=None):
     """
     Push a named artifact to an OCI compliant registry
     """
+    import mummi_operator.manager.registry as registry
+
     artifact = registry.RegistryArtifact()
 
     # The is the path and mediaType. I'm assuming this is a binary format

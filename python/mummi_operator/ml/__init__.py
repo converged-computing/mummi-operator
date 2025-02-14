@@ -9,7 +9,6 @@ import yaml
 
 import mummi_operator
 import mummi_operator.utils as utils
-from mummi_operator.client import get_subparser_helper
 from mummi_operator.config import load_config
 
 from .runner import MLRunner
@@ -50,11 +49,6 @@ def get_parser():
         formatter_class=argparse.RawTextHelpFormatter,
     )
     start.add_argument(
-        "--config",
-        help="Machine Learning config filename",
-        default="app-config.json",
-    )
-    start.add_argument(
         "--outdir",
         help="Output directory",
         default=os.getcwd(),
@@ -84,47 +78,81 @@ def get_parser():
         default=False,
         action="store_true",
     )
+    start.add_argument(
+        "--feedback",
+        help="Do feedback",
+        default=False,
+        action="store_true",
+    )
+    start.add_argument(
+        "--device",
+        help="Choose gpu or cpu device",
+        default="cpu",
+        choices=["cpu", "gpu"],
+    )
+    start.add_argument(
+        "--workspace",
+        help="Mummi workspace",
+        required=True,
+    )
+    start.add_argument(
+        "--encoder-model",
+        help="Encoder model path",
+        required=True,
+    )
+    start.add_argument(
+        "--interpolator",
+        help="Sampler interpolator",
+        default="ot_feedback",
+    )
+    start.add_argument(
+        "--ml-outdir",
+        help="Generator, sampler, and validator output directory",
+        required=True,
+    )
+    start.add_argument(
+        "-k",
+        "--kneighbors",
+        dest="kneighbors",
+        help="Number of neighbors for sampler (defaults to 10)",
+        type=int,
+        default=10,
+    )
+    start.add_argument("--lambda-lowerbound", type=int, default=0)
+    start.add_argument("--lambda-upperbound", type=int, default=1)
+    start.add_argument(
+        "--max-iterations",
+        type=int,
+        default=1000000,
+    )
+    start.add_argument(
+        "--sub-sample-frac",
+        type=float,
+        default=0.051,
+    )
+    start.add_argument(
+        "--no-healing",
+        help="Disable healing",
+        default=False,
+        action="store_true",
+    )
+    start.add_argument(
+        "--no-cleanup",
+        help="Disable cleanup",
+        default=False,
+        action="store_true",
+    )
+    start.add_argument(
+        "--resources",
+        help="Validator resources",
+        required=True,
+    )
+    start.add_argument(
+        "--complex",
+        help="Complex (gro) filename.",
+        required=True,
+    )
     return parser
-
-
-def load_mlrunner_config(config_file):
-    """
-    load and validate content of MLRunner config
-    """
-    if not os.path.exists(config_file):
-        raise ValueError(f"Config {config_file} does not exist.")
-    config = utils.read_yaml(config_file)
-    if config.get("encoder") is None or config["encoder"].get("path") is None:
-        raise ValueError("No encoder specified")
-    if config.get("workspace") is None or config["workspace"].get("path") is None:
-        raise ValueError("No workspace specified")
-    if config.get("sampler") is None:
-        raise ValueError("No sampler specified")
-    if config["sampler"]["feedback"].get("do_feedback") and (
-        config["sampler"]["feedback"].get("database") is None
-        or config["sampler"]["feedback"].get("frame_database") is None
-    ):
-        val = config["sampler"]["feedback"].get("do_feedback")
-        raise ValueError(
-            f"For sampler, if do_feedback = {val}, you must specify database and frame_database"
-        )
-
-    # Load paths from eval strings in config
-    gdict = {"mummi_ras": mummi_ras}
-    for key in ["workspace", "encoder"]:
-        if type(config[key]["path"]) is dict and "eval" in config[key]["path"]:
-            config[key]["path"] = eval(config[key]["path"]["eval"], gdict)
-
-    for key in ["sampler", "generator", "validator"]:
-        for val in ["inpath", "outpath"]:
-            if (
-                config[key].get(val)
-                and type(config[key][val]) is dict
-                and "eval" in config[key][val]
-            ):
-                config[key][val] = eval(config[key][val]["eval"], gdict)
-
-    return config
 
 
 def main():
@@ -148,24 +176,12 @@ def main():
         print(mummi_operator.__version__)
         sys.exit(0)
 
-    # add subparser (with help) from parser
-    # We aren't using this and could remove
-    get_subparser_helper(args, parser)
-
     mummi_core.init()
     mummi_core.create_root()
 
-    config = load_mlrunner_config(args.config)
+    # This is an easy (but not the best API surface) for passing args
     try:
-        runner = MLRunner(
-            config=config,
-            ids=args.jobid,
-            outdir=args.outdir,
-            registry=args.registry,
-            tag=args.tag,
-            plain_http=args.plain_http,
-            tls_verify=args.tls_verify,
-        )
+        runner = MLRunner(args)
         runner.setup()
         runner.run()
     except Exception as e:
