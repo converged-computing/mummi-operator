@@ -4,7 +4,7 @@
 
 ![img/mummi-operator.png](img/mummi-operator.png)
 
-The Mummi Operator is intended to run MiniMummi. 
+The Mummi Operator is intended to run MiniMummi.
 
 ## Usage
 
@@ -90,7 +90,7 @@ kubectl apply -f examples/dist/mummi-operator.yaml
 
 ```bash
 # Without GPU
-kubectl apply -f examples/test-aws/mummi.yaml 
+kubectl apply -f examples/test-aws/mummi.yaml
 ```
 
 ### b. With GPU
@@ -119,7 +119,7 @@ helm install --wait --generate-name -n gpu-operator --create-namespace nvidia/gp
 # Check labels and GPUs (you should see nvidia.com/gpu)
 kubectl get pods -n gpu-operator
 kubectl get nodes -o json | jq '.items[].metadata.labels'
-kubectl apply -f examples/test-aws/gpu-mummi.yaml 
+kubectl apply -f examples/test-aws/gpu-mummi.yaml
 ```
 
 Here is how to get the charts installed to the namespace and uninstall:
@@ -147,10 +147,10 @@ kubectl delete pod  mummi-sample-wfmanager-64d87ddb87-6w8lb
 If you want to delete the deployment, and note that jobs are not tied to the Mummi Operator (intentionally) so you can delete them separately:
 
 ```bash
-kubectl delete -f examples/test-aws/mummi.yaml 
+kubectl delete -f examples/test-aws/mummi.yaml
 
 # Or for GPU
-kubectl delete -f examples/test-aws/gpu-mummi.yaml 
+kubectl delete -f examples/test-aws/gpu-mummi.yaml
 kubectl delete jobs --all
 ```
 
@@ -168,18 +168,28 @@ eksctl delete cluster --config-file examples/eks-config-gpu-6.yaml --wait
 
 These are some design decisions I've made (of course open to discussion):
 
- - state is derived from Kubernetes, and not relying on some filesystem state
- - we assume jobs don't need to be paused / resumed / reclaimed like on HPC
- - internal: all of the controller logic, etc. should be internal
+### Initial Design
+
+ - State is derived from Kubernetes, and not relying on some filesystem state
+ - We assume jobs don't need to be paused / resumed / reclaimed like on HPC
+ - Internal: all of the controller logic, etc. should be internal
  - I'm trying to add kubernetes functionality in a way that doesn't disturb (change) core mummi. E.g., entrypoints and environment variables.
  - If/when the operator is deleted, jobs (createsim and cganalysis) are not. I think this might make sense if the orchestration needs update without destroying the jobs.
-   - But discussion is needed, because if the registry is part of the mini mummi setup it will be deleted to. 
+   - But discussion is needed, because if the registry is part of the mini mummi setup it will be deleted to.
    - But the job state can be re-discovered by a newly deployed operator
- - variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
- - instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
+ - Variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
+ - Instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
+
+### Refactored Design
+
+ - The model is a state machine
+ - There is no mummi logic (or code) required for the workflow manager.
+ - Each mummi job step is just a modular container for the state machine to use
 
 ### TODO
 
+- We need a way to (on start) take into account jobs in progress (sequence) so we don't rnu new ones.
+- We will want to put license, etc in one spot at top of repo (not in individual files, which get dated)
 - Right now we base the max jobs and they include completed, we need to not account for those.
 - need a general way to add job parameters (e.g., stopsimtime)
 - We don't want wfmanager to come up before mlserver (need to add some ready condition)
@@ -198,6 +208,9 @@ These are some design decisions I've made (of course open to discussion):
 
 ### Questions
 
+- Question for Loic - with MLServer running on its own, if we start it separately two times, do we sample the same point?
+  - E.g., do we need to add randomness or some other state to ensure it doesn't repeat when run as isolated jobs?
+  - the generate_new_samples function saves to a feedback database and I'm worried we need to update that each time.
 - Can we have some capture of "no change" for an iteration, and not increase the iteration count until there is?
 - Why is the ML server not more tightly controlled as individual jobs?
   - There is a disconnect betweeen using the rabbit data to kick off work vs. always running the ML server first.

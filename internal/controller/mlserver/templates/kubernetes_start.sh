@@ -33,8 +33,8 @@ WABBIT_HOST={{ .Mummi.RabbitHost }}
 
 # This gets the rabbitmq script if we need it (I didn't use it yet)
 # Note that this is the insecure port, we can test changing this to 15671
-curl http://${WABBIT_HOST}:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin  
-chmod +x /usr/local/bin/rabbitmqadmin  
+curl http://${WABBIT_HOST}:15672/cli/rabbitmqadmin -o /usr/local/bin/rabbitmqadmin
+chmod +x /usr/local/bin/rabbitmqadmin
 
 # Create dummy credentials
 mkdir -p $MUMMI_ROOT/mlserver

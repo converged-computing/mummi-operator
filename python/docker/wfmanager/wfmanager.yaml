@@ -1,0 +1,8 @@
+wfmanager:
+  config:
+    jobname:     "wfmanager"
+
+    # E.g., oras push <host>/<uri>:<sample> --plain-http .
+    oras:
+      host: registry-0.mini-mummi.default.svc.cluster.local:5000
+      plain_http: true

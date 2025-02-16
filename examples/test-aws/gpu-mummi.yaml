@@ -18,7 +18,7 @@ spec:
   manager:
     image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:wfmanager
     numberMaxSelectedPatchBuffer: 5
-    
+
   # Jobs for the Mummi workflow manager to submit / orchestrate
   # Right now we use defaults for most things (bundle size, nodes, etc)
   jobs:
@@ -32,4 +32,3 @@ spec:
       imagePullPolicy: Always
       config:
         gpus: 1
-

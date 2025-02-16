@@ -1,0 +1,74 @@
+name: createsim
+config:
+  nnodes:         1
+  nprocs:         1
+  cores per task: 6
+  ngpus:          0
+  walltime:       '0:45:00'
+
+# container image for createsims
+image: 633731392008.dkr.ecr.us-east-1.amazonaws.com/mini-mummi:createsims
+namespace: default
+
+script: |
+  # This sources the pixi environment with our stuff
+  . ~/.bash_profile
+
+  MUMMI_APP=/opt/clones/mummi-ras
+  export MUMMI_ROOT=$MUMMI_APP
+  export MUMMI_RESOURCES=/opt/clones/mummi_resources
+  export MUMMI_APP
+
+  export OMP_NUM_THREADS=6
+  simname={simname}
+  outfile={outfile}
+
+  # Make a custom place to save stuff, doesn't need to be var
+  locpath=/tmp/workdir
+  outpath=/tmp/out
+  registry="registry-0.mini-mummi.default.svc.cluster.local:5000"
+
+  echo ">> simname      = $simname"
+  echo ">> outpath      = $outpath"
+  echo ">> registry     = $registry"
+  echo ">> locpath      = $locpath"
+  echo ">> gmx          =" $(command -v gmx)
+  echo ">> hostname     =" $(hostname)
+
+  # Important - don't make the output so it is generated for us
+  # when it exists it checks for files within, don't want to do that
+  mkdir -p -v $locpath; cd $locpath
+
+  # Stage data from OCI registry (this has the set name, service, and namespace hard coded, ok for now)
+  echo "Looking for $simname with oras repo list"
+  oras repo list $registry --plain-http | grep $simname
+  echo "Pulling oras artifact to $locpath"
+  oras pull $registry/$simname:latest --plain-http
+
+  #  --mpi "autobind-24 gmx mdrun" \
+  #  --mdrunopt " -rdd 2.0 -ntomp 4 -dd 4 3 2 -nt 96" \
+  # vsoch: I removed -nb gpu
+  # --mdrunopt " -nb gpu -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" \
+  time pixi run --manifest-path /pixi-env/pixi.toml mummi_createsim \
+    --fstype simple \
+    --patch $simname \
+    --inpath $(pwd) \
+    --outpath $outpath \
+    --outlocal $locpath \
+    --logpath $locpath \
+    --loglevel 2 \
+    --gromacs gmx \
+    --mpi "gmx mdrun" \
+    --mini \
+    --mdrunopt " -ntmpi 1 -ntomp $OMP_NUM_THREADS -pin off" 2>&1 | tee $outfile
+
+  retval=$?
+  if [ $retval -eq 0 ] && [ -f /tmp/out/createsims.tar.gz ];
+    then
+      # Tar gz up the entire path (including createsims.tar.gz)
+      cd $outpath
+      tar czf createsims-output.tar.gz /tmp/out
+      echo "Simulation was successful, pushing result to $registry/$simname:createsim"
+      oras push --plain-http --insecure $registry/$simname:createsim createsims-output.tar.gz
+  fi
+  ls $outpath

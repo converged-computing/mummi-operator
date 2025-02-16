@@ -78,8 +78,8 @@ script: |
                       --mini \
                       --fcount $cframe 2>&1 | tee $outfile
 
-  retval=$?  
-  if [ $retval -eq 0 ] && [ -f cg_analysis.log ]; 
+  retval=$?
+  if [ $retval -eq 0 ] && [ -f cg_analysis.log ];
     then
       # Tar gz up the entire path (including createsims.tar.gz)
       cd $outpath
