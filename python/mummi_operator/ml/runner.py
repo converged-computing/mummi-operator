@@ -17,7 +17,7 @@ from mummi_ras.ml import ls_point as lsp
 from mummi_ras.ml.autoencoders import FullMiniDenseAutoencoder
 from mummi_ras.ml.feedback_frames import FeedbackFrames
 from mummi_ras.ml.samplers import get_interpolator, ls_sampler
-from mummi_ras.ml.validators import CGValidator
+from .validator import CGValidator
 
 # Print debug for now
 logging.basicConfig()
@@ -338,7 +338,6 @@ class MLRunner:
             complex_name=self.args.complex,
             healing=not self.args.no_healing,
             cleanup=not self.args.no_cleanup,
-            mini_mummi=self.mini_mummi,
         )
 
     def setup(self) -> None:
@@ -375,11 +374,10 @@ class MLRunner:
             if self.do_feedback:
                 self.feedback_frames.work()
             sample = self.generate_new_sample(jobid)
-            # Skip pushing to oras if no registry provided
             if not self.args.registry:
                 continue
             push_artifact(
-                sample[0],
+                sample,
                 name=jobid,
                 host=self.args.registry or None,
                 tag=self.args.tag,
@@ -446,7 +444,8 @@ class MLRunner:
             if is_valid:
                 break
 
-        return valid_files
+        # Assume just return one
+        return valid_files[0]
 
 
 def push_artifact(path, name, tag, host, tls_verify=None, plain_http=None):

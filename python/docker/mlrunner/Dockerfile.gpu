@@ -1,15 +1,19 @@
-FROM rockylinux:9
+FROM nvidia/cuda:12.2.0-devel-rockylinux9
 ARG MUMMI_MINI=1
 ENV MUMMI_MINI=${MUMMI_MINI}
-
-# Tell interfaces/naming we are in kubernetes, use the kubernetes-mini spec
-ENV MUMMI_KUBERNETES=1
 
 # Ensure pixi is not installed to root's home
 ENV PIXI_HOME=/opt/pixi
 
+# Tell interfaces/naming we are in kubernetes, use the kubernetes-mini spec
+ENV MUMMI_KUBERNETES=1
+
 # This corresponds with the branch to clone and directory at top level with repo
 RUN /bin/bash -c "curl -fsSL https://pixi.sh/install.sh | bash"
+
+ENV CUDA_HOME=/usr/local/cuda
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64/:/usr/local/cuda-12.2/targets/x86_64-linux/lib/
+ENV PATH=$PATH:$CUDA_HOME/bin
 
 RUN /opt/pixi/bin/pixi init pixi-env
 WORKDIR /pixi-env
@@ -40,7 +44,3 @@ RUN cd /opt/mummi-operator && \
     /opt/pixi/bin/pixi run --manifest-path /pixi-env/pixi.toml pip install oras redis IPython && \
     /opt/pixi/bin/pixi run --manifest-path /pixi-env/pixi.toml pip install -e . && \
     /opt/pixi/bin/pixi run --manifest-path /pixi-env/pixi.toml pip install .
-
-# /opt/clones needs to be world read/writa-able (probably just the first) for the HPC user
-RUN chmod -R 777 /opt/clones
-# The new kubernetes start is provided via a jobs_mlrunner.yaml file
