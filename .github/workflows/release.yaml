@@ -39,7 +39,7 @@ jobs:
         image=ghcr.io/converged-computing/mummi-operator:v${tag}
         make ${{ matrix.command }}-build IMG=${image}
 
-    - if: (github.event_name != 'pull_request')    
+    - if: (github.event_name != 'pull_request')
       name: Deploy Container
       env:
         tag: ${{ env.tag }}
@@ -65,7 +65,7 @@ jobs:
         tag: ${{ env.tag }}
       run: make build-config IMG=ghcr.io/converged-computing/mummi-operator:v${tag}
 
-    - if: (github.event_name != 'pull_request')    
+    - if: (github.event_name != 'pull_request')
       name: Release Mummi Operator
       uses: softprops/action-gh-release@v1
       with:

@@ -20,7 +20,7 @@ RUN cp /opt/mummi-operator/docker/mlrunner/pixi.toml /pixi-env/pixi.toml && \
     mv /opt/mummi-operator/docker/clones /opt/clones && \
     /opt/pixi/bin/pixi install --manifest-path /pixi-env/pixi.toml
 
-RUN /opt/pixi/bin/pixi run --manifest-path ./pixi.toml ./build.sh    
+RUN /opt/pixi/bin/pixi run --manifest-path ./pixi.toml ./build.sh
 RUN yum update -y && yum install -y vim rsync && \
     cd /opt/clones/mummi-ras && \
     /opt/pixi/bin/pixi run --manifest-path /pixi-env/pixi.toml pip install -e .
