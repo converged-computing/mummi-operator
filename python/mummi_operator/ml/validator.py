@@ -1,14 +1,13 @@
-import os
 import logging
-import numpy as np
-import subprocess as subp
 import multiprocessing
-from typing import List, Any
-from timeit import default_timer as timer
+import os
+import subprocess as subp
 from shutil import rmtree, which
-import signal
+from timeit import default_timer as timer
+from typing import List
 
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis.analysis import distances
 from MDAnalysis.analysis.rms import rmsd
 
@@ -39,16 +38,16 @@ class CGValidator:
 
         try:
             self.num_cores_prev = len(os.sched_getaffinity(0))
-        except AttributeError as e:
+        except AttributeError:
             self.num_cores_prev = multiprocessing.cpu_count()
 
         # We substract 2 for the ML server sampler/generator/feedback
-        self.num_cores = max(1, self.num_cores_prev - 2)  
+        self.num_cores = max(1, self.num_cores_prev - 2)
 
         self.mpcontext = "fork"  # fork or spawn
 
         self.current_rpath = iteration_path
-        LOGGER.info(f"> Initialization of validator with")
+        LOGGER.info("> Initialization of validator with")
         LOGGER.info(f"  > iteration_path        = {self.iteration_path}")
         LOGGER.info(f"  > resource_path         = {self.resource_dir}")
         LOGGER.info(f"  > complex_name          = {self.complex_name}")
@@ -62,7 +61,7 @@ class CGValidator:
         gmx_path = which("gmx")
         if gmx_path is None:
             LOGGER.error(
-                f"GROMACS 'gmx' not found. Please verify that GROMACS is installed and reachable. Aborting"
+                "GROMACS 'gmx' not found. Please verify that GROMACS is installed and reachable. Aborting"
             )
             raise RuntimeError("GROMACS executable 'gmx' is missing in PATH.")
 
@@ -81,12 +80,12 @@ class CGValidator:
         On POWERPC, psutil is not working properly
         """
         p = subp.run(["lscpu"], capture_output=True, text=True)
-        for l in p.stdout.split("\n"):
-            if l.startswith("Thread(s) per core:"):
+        for line in p.stdout.split("\n"):
+            if line.startswith("Thread(s) per core:"):
                 try:
-                    nthreads_per_core = int(l.split()[-1])
-                except ValueError as e:
-                    LOGGER.error(f"Could not find the number of threads/core in lscpu output")
+                    nthreads_per_core = int(line.split()[-1])
+                except ValueError:
+                    LOGGER.error("Could not find the number of threads/core in lscpu output")
                     nthreads_per_core = None
         return nthreads_per_core
 
@@ -97,16 +96,6 @@ class CGValidator:
         start = timer()
         for i in range(len(positionsArray)):
             results.append(self.validate(nameArray[i], positionsArray[i]))
-        LOGGER.info(
-            f"Validator returned with {len(results)} elements and took: {timer()-start} sec ({len(results) / (timer()-start)} sample/sec)"
-        )
-        return np.array(results, dtype=object)
-
-    def init_worker(self):
-        """Needed to avoid that worker catch signal intended for the server."""
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
-
         LOGGER.info(
             f"Validator returned with {len(results)} elements and took: {timer()-start} sec ({len(results) / (timer()-start)} sample/sec)"
         )
@@ -156,7 +145,7 @@ class CGValidator:
             try:
                 maximum_force = np.append(previous_data["maximum_force"], maximum_force)
                 potential_energy = np.append(previous_data["potential_energy"], potential_energy)
-            except KeyError as e:
+            except KeyError:
                 maximum_force = return_array[:, 2]
                 potential_energy = return_array[:, 3]
                 pass
@@ -377,7 +366,11 @@ class CGValidator:
 
     @staticmethod
     def RBD_rmsd(
-        u: mda.Universe, ref: mda.Universe, rmsd_cutoff: float, dist_cutoff: float, name: str
+        u: mda.Universe,
+        ref: mda.Universe,
+        rmsd_cutoff: float,
+        dist_cutoff: float,
+        name: str,
     ) -> bool:
         # Looks to see if the RBD rmsd is close to the reference, which would indicate that the fold is correct
         # Also checks that the domain is not mirrored
@@ -433,7 +426,11 @@ class CGValidator:
 
     @staticmethod
     def Gdom_rmsd(
-        u: mda.Universe, ref: mda.Universe, rmsd_cutoff: float, dist_cutoff: float, name: str
+        u: mda.Universe,
+        ref: mda.Universe,
+        rmsd_cutoff: float,
+        dist_cutoff: float,
+        name: str,
     ) -> bool:
         # Looks to see if the G-domain rmsd is close to the reference, which would indicate that the fold is correct
         # Also checks that the domain is not mirrored
@@ -526,10 +523,12 @@ class CGValidator:
         subp.call(f"cp {self.resource_dir}/martini_v2.x_new-rf-em-sc-test.mdp .", shell=True)
         subp.call(f"cp {self.resource_dir}/martini_v2.x_new-rf-em-test.mdp .", shell=True)
         subp.call(
-            f"sed -ie 's/XXX/{added_mdp_options}/g' martini_v2.x_new-rf-em-test.mdp", shell=True
+            f"sed -ie 's/XXX/{added_mdp_options}/g' martini_v2.x_new-rf-em-test.mdp",
+            shell=True,
         )
         subp.call(
-            f"sed -ie 's/XXX/{added_mdp_options}/g' martini_v2.x_new-rf-em-sc-test.mdp", shell=True
+            f"sed -ie 's/XXX/{added_mdp_options}/g' martini_v2.x_new-rf-em-sc-test.mdp",
+            shell=True,
         )
 
         # Run minimization
@@ -544,7 +543,7 @@ class CGValidator:
                     timeout=timeout_gmx,
                 )
                 # @NOTE: some gmx versions are compiled without thread-MPI and do not support setting the number of threads "-nt" so fix OMP_NUM....
-                mdrun = subp.run(
+                subp.run(
                     f"export OMP_NUM_THREADS=1; gmx mdrun -nt 1 -ntmpi 1 -v -deffnm topol-sc -c {name}-em-sc.gro  > md-sc.out 2>&1",
                     shell=True,
                     capture_output=True,
@@ -556,7 +555,7 @@ class CGValidator:
                     capture_output=True,
                     timeout=timeout_gmx,
                 )
-                mdrun2 = subp.run(
+                subp.run(
                     f"export OMP_NUM_THREADS=1; gmx mdrun -nt 1 -ntmpi 1 -v -deffnm topol -c {name}-em.gro  > md.out 2>&1",
                     shell=True,
                     capture_output=True,
@@ -581,7 +580,12 @@ class CGValidator:
                     LOGGER.debug(
                         f"minimization results for {name}: potential energy of {pe} and maximum force of {mf}"
                     )
-                    if mf > -self.max_mf and mf < self.max_mf and pe > -self.max_pe and pe < self.max_pe:
+                    if (
+                        mf > -self.max_mf
+                        and mf < self.max_mf
+                        and pe > -self.max_pe
+                        and pe < self.max_pe
+                    ):
                         valid_status = True
                         if self.healing:
                             ## This is a healing section, that's the new addition compared to classic CGValidator class
@@ -620,7 +624,10 @@ class CGValidator:
                                     CGValidator._cleanup_dir(old_cwd, fullPathDir)
                                 return [False, gromacs_file, -1, -1]
 
-                            subp.call(f"mv {name}-em_whole.gro {self.iteration_path}/{name}.gro", shell=True)
+                            subp.call(
+                                f"mv {name}-em_whole.gro {self.iteration_path}/{name}.gro",
+                                shell=True,
+                            )
                         else:
                             subp.call(f"mv {name}.gro {self.iteration_path}/", shell=True)
                         end = timer() - start

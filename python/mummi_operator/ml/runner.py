@@ -2,6 +2,7 @@
 
 import datetime
 import glob
+import json
 import logging
 import os
 import pathlib
@@ -17,6 +18,8 @@ from mummi_ras.ml import ls_point as lsp
 from mummi_ras.ml.autoencoders import FullMiniDenseAutoencoder
 from mummi_ras.ml.feedback_frames import FeedbackFrames
 from mummi_ras.ml.samplers import get_interpolator, ls_sampler
+
+from .utils import timed
 from .validator import CGValidator
 
 # Print debug for now
@@ -71,9 +74,7 @@ def _latest_patch_id_generated(RPATH: str) -> int:
     write the patch X+1 safely without erasing any structures.
     """
     nsamples = len(glob.glob(RPATH + "/*.npz"))
-    nsamples = (
-        nsamples - 2
-    )  # the - 2 is to remove master_iterX.npz and table_all_predictions.npz
+    nsamples = nsamples - 2  # the - 2 is to remove master_iterX.npz and table_all_predictions.npz
     return max(nsamples, 0)  # to avoid returning a negative number if RPATH was empty
 
 
@@ -113,9 +114,7 @@ def checking_sampling_db(database: str, model_name: str) -> bool:
     prev_model_name = sampling_db["model_name"]
     if model_name != prev_model_name:
         LOGGER.error("Old sampling DB cannot be used with different ML model.")
-        LOGGER.error(
-            f"This DB {database} has been created with ML model {prev_model_name}"
-        )
+        LOGGER.error(f"This DB {database} has been created with ML model {prev_model_name}")
         LOGGER.error(f"You are currently used Latent Space {model_name}")
         return False
     return True
@@ -132,9 +131,7 @@ def create_sets(training_data_files: List[str]) -> List[List]:
         for label in state_labels:
             bary = data["labels"] == label
             if label in sets:
-                sets[label] = np.concatenate(
-                    (sets[label], data["x_test_encoded"][bary])
-                )
+                sets[label] = np.concatenate((sets[label], data["x_test_encoded"][bary]))
             else:
                 sets[label] = data["x_test_encoded"][bary]
 
@@ -159,19 +156,24 @@ def create_sets(training_data_files: List[str]) -> List[List]:
 
 class MLRunner:
     """
-    ML runner implementation for Mummi Operator
+    ML runner implementation for Mummi Operator.
 
-    Intended to be run as a job. Note that the init doesn't have the best design to
-    require a custom data structure "config," however the only use case is from the
-    client here that prepares it, so it is OK for now.
+    Intended to be run as a job. The config file is removed in favor of command line arguments.
+    Timings are added for different steps.
     """
 
     def __init__(self, args) -> None:
         self.args = args
         self.args.tag = self.args.tag or "mlrunner"
         self.logger = LOGGER
+
         # The MLRunner is currently designed for Mini Mummi
         self.mini_mummi = True
+
+        # Save total times along with timestamps of events
+        self.times = {}
+        self.timestamps = {}
+        self.function_times = {}
 
     @property
     def database_dir(self):
@@ -211,13 +213,30 @@ class MLRunner:
         """
         return os.path.dirname(self.args.encoder_model)
 
-    def read_specs(self):
+    def add_timestamp(self, name, timestamp=None):
+        """
+        Add a timestamp to times. This assumes unique names.
+        """
+        if name in self.timestamps:
+            raise ValueError(f"Already seen {name}, this should not happen.")
+        self.timestamps[name] = timestamp or time.time()
+
+    def add_time(self, name, duration):
+        """
+        Add a time duration to times. This assumes unique names.
+        """
+        if name in self.times:
+            raise ValueError(f"Already seen {name}, this should not happen.")
+        self.times[name] = duration
+
+    def show_specs(self):
+        """
+        Show MLRunner specs for the user
+        """
         self.logger.info(f"ML Server launched on host: {platform.node()}")
         os.makedirs(self.database_dir, exist_ok=True)
         if self.pickle_interpolator and os.path.isfile(self.pickle_interpolator):
-            self.logger.info(
-                f"Pre-computed interpolator found: {self.pickle_interpolator}"
-            )
+            self.logger.info(f"Pre-computed interpolator found: {self.pickle_interpolator}")
 
         self.logger.info("> Initializing MuMMI ML Runner")
         self.logger.info(f"  > Mini-Mummi                 {self.mini_mummi}")
@@ -228,7 +247,7 @@ class MLRunner:
         self.logger.info(f"    > CG frames Feedback DB    {self.feedbackframe_db}")
         self.logger.info("  > Generator")
         self.logger.info(f"    > Encoder                  {self.encoder_path}")
-        self.logger.info("  > Validator")
+        self.logger.info("  > Validator                   CGValidator")
 
     def _setup_training_sets(self):
         training_dir = os.path.join(self.encoder_path, "training")
@@ -237,7 +256,10 @@ class MLRunner:
         # PC3: round 1: If Konstantia generates new validation data for MuMMI which are contained in one file
         training_data = list(pathlib.Path(training_dir).glob("validation_data_all.npz"))
         LOGGER.info(f"Training data {training_dir} => {len(training_data)} files")
+
+        self.add_timestamp("create_sets_start")
         states = create_sets(training_data)
+        self.add_timestamp("create_sets_complete")
 
         # Only two states in mini MuMMI
         states = states[:2]
@@ -258,6 +280,7 @@ class MLRunner:
 
         return states
 
+    @timed
     def setup_sampler(self):
         """
         Setup the sampler.
@@ -279,9 +302,7 @@ class MLRunner:
             if not checking_sampling_db(feedback_db_path, self.encoder_path):
                 feedback_db_path = None
                 feedbackframe_db = None
-                LOGGER.warning(
-                    f"Feedback {feedback_db_path} is not valid for this ML model."
-                )
+                LOGGER.warning(f"Feedback {feedback_db_path} is not valid for this ML model.")
                 LOGGER.warning("All feedback is deactivated for this run.")
             else:
                 LOGGER.info(f"Feedback DB for sampling located in {feedback_db_path}")
@@ -303,10 +324,9 @@ class MLRunner:
                 LOGGER.info(
                     f"Loaded pre-computed interpolator {self.pickle_interpolator} in {end:.03f} seconds for {self.interpolator.size()} LS points"
                 )
+                self.add_time("loaded_pre_computed_interpolator_seconds", end)
         else:
-            LOGGER.warning(
-                "Could not load pre-computed interpolator. Computing interpolator"
-            )
+            LOGGER.warning("Could not load pre-computed interpolator. Computing interpolator")
             interpolator = get_interpolator(self.args.interpolator)
             self.interpolator = interpolator(
                 states=states,
@@ -316,6 +336,7 @@ class MLRunner:
                 num_iter_max=self.args.max_iterations,
             )
             end = time.time() - start
+            self.add_time("created_interpolator_seconds", end)
             LOGGER.info(
                 f"Interpolator {self.args.interpolator} created in {end:.03f} seconds for {self.interpolator.size()} LS points"
             )
@@ -327,9 +348,11 @@ class MLRunner:
             feedback_frame=feedbackframe_db,
         )
 
+    @timed
     def setup_generator(self):
         return FullMiniDenseAutoencoder(model_path=self.encoder_path)
 
+    @timed
     def setup_validator(self):
         resource_path = Naming.dir_res(self.args.resources)
         return CGValidator(
@@ -340,11 +363,12 @@ class MLRunner:
             cleanup=not self.args.no_cleanup,
         )
 
+    @timed
     def setup(self) -> None:
         """
         Setup the MLRunner
         """
-        self.read_specs()
+        self.show_specs()
         self.sampler = None
         self.generator = self.setup_generator()
         self.validator = self.setup_validator()
@@ -355,9 +379,7 @@ class MLRunner:
         # Are we doing feedback? If yes, load into model database
         if self.do_feedback:
             feed_path = Naming.dir_root("feedback-cg")
-            model = FullMiniDenseAutoencoder(
-                model_path=self.encoder_path, device=self.args.device
-            )
+            model = FullMiniDenseAutoencoder(model_path=self.encoder_path, device=self.args.device)
             self.feedback_frames = FeedbackFrames(
                 database=self.feedbackframe_db,
                 path=feed_path,
@@ -365,6 +387,7 @@ class MLRunner:
                 model_name=self.encoder_path,
             )
 
+    @timed
     def run(self) -> None:
         """
         Run the mlserver to generate some number of samples.
@@ -376,6 +399,7 @@ class MLRunner:
             sample = self.generate_new_sample(jobid)
             if not self.args.registry:
                 continue
+            self.add_timestamp(f"push_{jobid}_start")
             push_artifact(
                 sample,
                 name=jobid,
@@ -384,7 +408,19 @@ class MLRunner:
                 tls_verify=self.args.tls_verify,
                 plain_http=self.args.plain_http,
             )
+            self.add_timestamp(f"push_{jobid}_complete")
 
+        # Show times collected across jobids
+        self.show_times()
+
+    def show_times(self):
+        """
+        Print final times and timestamps to the console (job log)
+        """
+        print("=== times\n" + json.dumps(self.times) + "\n===")
+        print("=== timestamps\n" + json.dumps(self.timestamps) + "\n===")
+
+    @timed
     def generate_new_sample(self, jobid):
         """
         Generate a sample structure that passes validation.
@@ -402,27 +438,30 @@ class MLRunner:
             ls_coords = self.sampler.get_new_ls_points(1)
             sample_end = time.time() - sample_start
             LOGGER.info(f"Sampled 1 in {sample_end} seconds")
+            self.add_time(f"sampled_{jobid}", sample_end)
             for pts in ls_coords:
                 new_ls_coords.append(pts.get_coordinates())
                 new_lambda.append(pts.get_lamda())
             num_new_sample += len(ls_coords)
 
+            self.add_timestamp(f"generator_decode_{jobid}_start")
             new_positions = self.generator.decode(ls_coords)
+            self.add_timestamp(f"generator_decode_{jobid}_complete")
             names_array, positions_array = write_patches(
                 outpath=self.args.ml_outdir,
                 iteration_id=jobid,
                 new_positions=new_positions,
             )
-            LOGGER.debug(
-                f"generated structures done. new_positions = {new_positions.shape}"
-            )
+            LOGGER.debug(f"generated structures done. new_positions = {new_positions.shape}")
+
+            # These can be set multiple times, but we will always keep the last (successful)
+            # valid sample. The entire process to get that is represented in total function time
+            self.add_timestamp(f"validate_{jobid}_start")
 
             # Our jobid looks like structure_<number> and we need to pass just the number here
             # This isn't great, but I don't want to copy over all the validator code
             iteration_id = int(jobid.split("_")[-1])
-            return_array = self.validator.validateArray(
-                iteration_id, names_array, positions_array
-            )
+            return_array = self.validator.validateArray(iteration_id, names_array, positions_array)
             is_valid = return_array[0][0]
 
             # if not valid, try again
@@ -435,12 +474,11 @@ class MLRunner:
                 return_array=return_array,
                 all_structure_names=names_array,
             )
-            valid_files = [
-                os.path.join(self.validator.current_rpath, f) for f in valid_files
-            ]
+            valid_files = [os.path.join(self.validator.current_rpath, f) for f in valid_files]
             LOGGER.debug(
                 f"mlrunner {jobid} => valid structures={[os.path.join(self.validator.current_rpath, f) for f in valid_files]}"
             )
+            self.add_timestamp(f"validate_{jobid}_complete")
             if is_valid:
                 break
 

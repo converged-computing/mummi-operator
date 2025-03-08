@@ -195,7 +195,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         run = dict(step.run)
 
         batch_header = dict(self._batch)
-        walltime = step.run.get("walltime", None)
+        walltime = self.config.get("walltime", None)
         batch_header["walltime"] = convert_walltime_to_seconds(walltime)
 
         if run["nodes"]:
@@ -347,7 +347,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
 
         processors = step.run.get("procs", 0)
         processors = self.set_default_int(processors, 1)
-        walltime = convert_walltime_to_seconds(step.run.get("walltime", 0))
+        walltime = convert_walltime_to_seconds(self.config.get("walltime", 0))
         metadata = client.V1ObjectMeta(name=configmap_name)
 
         # Get variables from job description
@@ -380,14 +380,14 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
 
         # Assume for now nvidia, this can be changed
         if ngpus > 0:
-            gpu_label = step.run.get("gpulabel", "nvidia.com/gpu")
+            gpu_label = self.config.get("gpulabel", "nvidia.com/gpu")
             resources[gpu_label] = ngpus
 
         # Wrap as requests and limits
         resources = {"requests": resources, "limits": resources}
 
         # Container image pull policy
-        pull_policy = step.run.get("pull_policy", "IfNotPresent")
+        pull_policy = self.config.get("pull_policy") or "IfNotPresent"
         print(f"Pull policy for {configmap_name} is {pull_policy}")
 
         # Job container to run the script
@@ -409,6 +409,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         )
 
         # Only add walltime if it's > 0 and not None
+        print(f"Walltime is {walltime}")
         if walltime:
             container.active_deadline_seconds = int(walltime)
 
@@ -443,14 +444,21 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             },
         }
 
+        # These options are required for the job to fail if the pod fails
+        backoff_limit = 0
+        if self.config.get("retry_failure") in true_options:
+            backoff_limit = 6
+
+        print(f"Backoff limit is {backoff_limit}")
+
         # Do we want the job to terminate after failure?
         spec = client.V1JobSpec(
-            parallelism=nodes, completions=nodes, suspend=False, template=template
+            parallelism=nodes,
+            completions=nodes,
+            suspend=False,
+            template=template,
+            backoff_limit=backoff_limit,
         )
-
-        # These options are required for the job to fail if the pod fails
-        if step.run.get("retry_failure") in true_options:
-            spec.backoffLimit = 0
 
         return client.V1Job(
             api_version="batch/v1",
@@ -618,7 +626,9 @@ class KubernetesTracker(JobTracker):
                 self.adapter = KubernetesScriptAdapter(**adapter_batch)
 
                 # There is probably a right way to pass these on, this works for now
+                # We want to make the config data easily accessible.
                 self.adapter.job_desc = job_desc
+                self.adapter.config = job_desc["config"]
         else:
             raise ValueError(
                 "The Kubernetes adapter type must be used with the Kubernetes tracker."
