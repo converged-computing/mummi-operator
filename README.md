@@ -4,7 +4,7 @@
 
 ![img/mummi-operator.png](img/mummi-operator.png)
 
-The Mummi Operator is intended to run MiniMummi.
+The Mummi Operator is intended to run MiniMummi. 
 
 ## Usage
 
@@ -175,49 +175,13 @@ These are some design decisions I've made (of course open to discussion):
  - Internal: all of the controller logic, etc. should be internal
  - I'm trying to add kubernetes functionality in a way that doesn't disturb (change) core mummi. E.g., entrypoints and environment variables.
  - If/when the operator is deleted, jobs (createsim and cganalysis) are not. I think this might make sense if the orchestration needs update without destroying the jobs.
-   - But discussion is needed, because if the registry is part of the mini mummi setup it will be deleted to.
    - But the job state can be re-discovered by a newly deployed operator
  - Variables and functions to derive customization for Mummi should all derive from the spec (e.g., so the many templates can be populate just using it)
  - Instead of all assets for a deployment in one config map or secret, I am separating them out. This will allow more pointed update (if needed) and more transparency to the developer user.
 
 ### Refactored Design
 
- - The model is a state machine
- - There is no mummi logic (or code) required for the workflow manager.
- - Each mummi job step is just a modular container for the state machine to use
-
-### TODO
-
-- We need a way to (on start) take into account jobs in progress (sequence) so we don't rnu new ones.
-- We will want to put license, etc in one spot at top of repo (not in individual files, which get dated)
-- Right now we base the max jobs and they include completed, we need to not account for those.
-- need a general way to add job parameters (e.g., stopsimtime)
-- We don't want wfmanager to come up before mlserver (need to add some ready condition)
-- Can we rewrite mlserver (package it) as a job?
-  - rabbitmq queues up requests for new samples
-  - the ML server sample generation could also be some kind of more modular unit (job)
-- We need to target deployments - e.g., rabbitmq does not need a GPU node. So we need:
-  - A cluster config that creates some number of GPUs, and some number of non-GPU nodes.
-  - A way to prevent the non gpu apps to be scheduled on GPU nodes.
-- We likely want to test with a real registry OR allow a volume bind (existing data) to the registry.
-  - Otherwise, artifacts deleted on cleanup. We could also have an option that allows keeping the ephemeral registry.
-- Find source of warning `Unidentified hostname: wfmanager.mummi-sample.default.svc.cluster.local` in mummi-core
-- wfmanager: when mummi python cloneable, can install (clone) on demand
-- mlserver model should eventually be customizable (currently built into container)
-- rabbitmq and wfmanager: My certificate generation is off - I am missing the p12 files (need to be generated in go). It generates handshake error. Disabled for now but needs to be reenabled by adding the cert file back.
-
-### Questions
-
-- Question for Loic - with MLServer running on its own, if we start it separately two times, do we sample the same point?
-  - E.g., do we need to add randomness or some other state to ensure it doesn't repeat when run as isolated jobs?
-  - the generate_new_samples function saves to a feedback database and I'm worried we need to update that each time.
-- Can we have some capture of "no change" for an iteration, and not increase the iteration count until there is?
-- Why is the ML server not more tightly controlled as individual jobs?
-  - There is a disconnect betweeen using the rabbit data to kick off work vs. always running the ML server first.
-  - It takes 5 minutes to get enough samples to start createsims, but they are generated in seconds.
-- Under what conditions do we cancel / cleanup jobs?
-- When should I do a PR to upstream mummi-ras? When everything working as we want?
-- When do we cleanup old jobs / config maps? If we need them for state, we have to keep around.
+Note that this design was further refactored into the [state machine operator](https://github.com/converged-computing/state-machine operator). This model uses a state machine, and there is no mummi logic (or code) required for the workflow manager. Each mummi job step is just a modular container for the state machine to use.
 
 ## Debugging
 
