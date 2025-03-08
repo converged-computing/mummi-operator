@@ -21,9 +21,9 @@ class timed:
         res = self.func(cls, *args, **kwargs)
         end = time.time()
         # Allow for more than one timing of a function
-        if name not in cls.times:
-            cls.times[name] = []
-        cls.times[name].append(round(end - start, 3))
+        if name not in cls.function_times:
+            cls.function_times[name] = []
+        cls.function_times[name].append(round(end - start, 3))
         return res
 
 

@@ -173,6 +173,7 @@ class MLRunner:
         # Save total times along with timestamps of events
         self.times = {}
         self.timestamps = {}
+        self.function_times = {}
 
     @property
     def database_dir(self):

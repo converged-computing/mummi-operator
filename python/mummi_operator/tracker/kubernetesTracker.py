@@ -160,6 +160,11 @@ class KubernetesJob:
         if step.walltime:
             container.active_deadline_seconds = int(walltime)
 
+        # Do we want the job to terminate after failure?
+        backoff_limit = 0
+        if self.config.get("retry_failure") in true_options:
+            backoff_limit = 6
+
         # Prepare volumes (with config map)
         volumes = [
             client.V1Volume(
@@ -197,9 +202,10 @@ class KubernetesJob:
         }
 
         # Do we want the job to terminate after failure?
+        # Generally, no.
         backoff_limit = 0
-        if self.config.get("retry_failure") in true_options:
-            backoff_limit = 6
+        # if self.config.get("retry_failure") in true_options:
+        #    backoff_limit = 6
 
         spec = client.V1JobSpec(
             parallelism=step.nodes,
