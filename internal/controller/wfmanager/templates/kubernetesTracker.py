@@ -158,7 +158,9 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         return [
             x.metadata.name
             for x in jobs.items
-            if x.status.completion_time is None and x.status.active == 0
+            if x.status.completion_time is None
+            and x.status.active == 0
+            and x.metadata.labels.get("app") == self.job_desc["job_type"]
         ]
 
     @queued.setter
@@ -174,7 +176,9 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         return [
             x.metadata.name
             for x in jobs.items
-            if x.status.completion_time is None and x.status.active == 1
+            if x.status.completion_time is None
+            and x.status.active == 1
+            and x.metadata.labels.get("app") == self.job_desc["job_type"]
         ]
 
     @running.setter
