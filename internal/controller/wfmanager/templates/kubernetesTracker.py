@@ -160,6 +160,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             for x in jobs.items
             if x.status.completion_time is None
             and x.status.active == 0
+            and x.status.failed != 1
             and x.metadata.labels.get("app") == self.job_desc["job_type"]
         ]
 
