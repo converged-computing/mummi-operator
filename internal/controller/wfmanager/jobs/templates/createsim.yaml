@@ -27,7 +27,9 @@ script: |
 
   {{ template "mummi-vars" . }}
 
-  export OMP_NUM_THREADS={{ if .Job.Config.CoresPerTask }}{{ .Job.Config.CoresPerTask }}{{ else }}6{{ end }}
+  # This could be the .Job.Config.CoresPerTask, but since that is used for schedulign (and we have to ask
+  # for less) we set it to nproc
+  export OMP_NUM_THREADS=$(nproc)
   simname={simname}
   outpath={outpath}
   outfile={outfile}
