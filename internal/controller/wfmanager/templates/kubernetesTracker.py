@@ -449,6 +449,12 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             },
         }
 
+        # Add node selectors? E.g.,
+        # node.kubernetes.io/instance-type: c7a.4xlarge
+        node_selector = self.get_node_selector()
+        if node_selector is not None:
+            template["spec"]["nodeSelector"] = node_selector
+
         # These options are required for the job to fail if the pod fails
         backoff_limit = 0
         if self.config.get("retry_failure") in true_options:
@@ -471,6 +477,25 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
             metadata=metadata,
             spec=spec,
         )
+
+    @property
+    def properties(self):
+        """
+        Properties are attributes that are specific to a tracker.
+        """
+        # Properties can be provided as a string to json load
+        props = self.job_desc.get("properties", {})
+        if isinstance(props, str):
+            props = json.loads(props)
+        return props
+
+
+    def get_node_selector(self):
+        """
+        Node selector is in properties -> node-selector
+        """
+        return self.properties.get("node-selector")
+
 
     def submit(self, step, path, cwd, job_map=None, env=None):
         """
