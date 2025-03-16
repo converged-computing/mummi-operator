@@ -13,9 +13,13 @@ config:
   gpulabel:         {{ if .Spec.Labels.GPU }}{{ .Spec.Labels.GPU }}{{ else }}nvidia.com/gpu{{ end }}
   pull_policy:      {{ .Job.ImagePullPolicy }}
   retry_failure:    {{ if .Job.Config.RetryFailure }}true{{ else }}false{{ end }}
-
   # If this job is nested (run inside batch ob - leave out entirely if not)
   {{ if .Job.Config.Nested }}nested: True{{ end }}
+
+{{ if .Job.NodeSelector }}
+properties:
+  node-selector: '{{ .Job.NodeSelector }}'
+{{ end }}
 {{end}}
 
 {{ define "oras-pull" }}

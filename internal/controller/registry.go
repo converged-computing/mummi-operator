@@ -92,6 +92,10 @@ func (r *MiniMummiReconciler) createStatefulSet(
 			},
 		},
 	}
+	if spec.Spec.Registry.NodeSelector != "" {
+		nodeSelector := map[string]string{"node.kubernetes.io/instance-type": spec.Spec.Registry.NodeSelector}
+		statefulSet.Spec.Template.Spec.NodeSelector = nodeSelector
+	}
 	ctrl.SetControllerReference(spec, statefulSet, r.Scheme)
 	err := r.Create(ctx, statefulSet)
 	return statefulSet, err
