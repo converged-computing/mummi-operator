@@ -259,7 +259,7 @@ type WorkflowManager struct {
 	Logging Logging `json:"logging,omitempty"`
 	// Workspace was also empty, read from config.yaml and left out
 
-	// selector for the job
+	// selector for the workflow manager
 	// +omitempty
 	NodeSelector string `json:"nodeSelector,omitempty"`
 
@@ -571,7 +571,7 @@ type OrasConfig struct {
 	// +optional
 	Image string `json:"image,omitempty"`
 
-	// selector for the job
+	// selector for the registry
 	// +omitempty
 	NodeSelector string `json:"nodeSelector,omitempty"`
 
@@ -610,6 +610,10 @@ type RabbitMQ struct {
 	// Broker (for example RabbitMQ) parameters
 	// +optional
 	Broker RabbitMQBroker `json:"broker,omitempty"`
+
+	// selector for rabbitmq
+	// +omitempty
+	NodeSelector string `json:"nodeSelector,omitempty"`
 
 	// container image for rabbitmq
 	// +omitempty
@@ -763,6 +767,10 @@ type MLServerSampler struct {
 
 type MLServer struct {
 
+	// Custom working directory for server
+	// +optional
+	Workdir string `json:"workdir,omitempty"`
+
 	// Run in interactive debug mode (sleep infinity)
 	// +optional
 	Interactive bool `json:"interactive,omitempty"`
@@ -778,7 +786,7 @@ type MLServer struct {
 	// +optional
 	Config MLServerConfig `json:"config"`
 
-	// selector for the job
+	// selector for the mlserver
 	// +omitempty
 	NodeSelector string `json:"nodeSelector,omitempty"`
 
