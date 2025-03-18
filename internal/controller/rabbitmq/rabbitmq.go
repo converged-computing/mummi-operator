@@ -79,7 +79,7 @@ func NewRabbitDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 		},
 	}
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      spec.RabbitName(),
 			Namespace: spec.Namespace,
@@ -106,4 +106,9 @@ func NewRabbitDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 			},
 		},
 	}
+	if spec.Spec.RabbitMQ.NodeSelector != "" {
+		nodeSelector := map[string]string{"node.kubernetes.io/instance-type": spec.Spec.RabbitMQ.NodeSelector}
+		deployment.Spec.Template.Spec.NodeSelector = nodeSelector
+	}
+	return deployment
 }

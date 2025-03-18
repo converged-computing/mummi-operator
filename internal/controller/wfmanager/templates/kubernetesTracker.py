@@ -453,7 +453,7 @@ class KubernetesScriptAdapter(SchedulerScriptAdapter):
         # node.kubernetes.io/instance-type: c7a.4xlarge
         node_selector = self.get_node_selector()
         if node_selector is not None:
-            template["spec"]["nodeSelector"] = node_selector
+            template["spec"]["nodeSelector"] = json.loads(node_selector)
 
         # These options are required for the job to fail if the pod fails
         backoff_limit = 0

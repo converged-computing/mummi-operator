@@ -120,7 +120,7 @@ func NewWorkflowManagerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 		},
 	}
 	if spec.Spec.WorkflowManager.NodeSelector != "" {
-		nodeSelector := map[string]string{"node.kubernetes.io/instance-type": spec.Spec.Registry.NodeSelector}
+		nodeSelector := map[string]string{"node.kubernetes.io/instance-type": spec.Spec.WorkflowManager.NodeSelector}
 		deployment.Spec.Template.Spec.NodeSelector = nodeSelector
 	}
 	return deployment

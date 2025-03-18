@@ -56,6 +56,12 @@ func NewMLServerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 			},
 		},
 	}
+
+	// Custom working directory
+	if spec.Spec.MLServer.Workdir != "" {
+		container.WorkingDir = spec.Spec.MLServer.Workdir
+	}
+
 	// Are we asking for GPU?
 	if spec.Spec.MLServer.Config.Gpus > 0 {
 		labelName, labelValue := spec.GetGPULabel(spec.Spec.MLServer.Config.Gpus)
@@ -131,7 +137,7 @@ func NewMLServerDeployment(spec *api.MiniMummi) *appsv1.Deployment {
 		},
 	}
 	if spec.Spec.MLServer.NodeSelector != "" {
-		nodeSelector := map[string]string{"node.kubernetes.io/instance-type": spec.Spec.Registry.NodeSelector}
+		nodeSelector := map[string]string{"node.kubernetes.io/instance-type": spec.Spec.MLServer.NodeSelector}
 		deployment.Spec.Template.Spec.NodeSelector = nodeSelector
 	}
 	return deployment

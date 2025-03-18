@@ -114,6 +114,9 @@ spec:
                       interactive:
                         description: Run in interactive mode for debugging
                         type: boolean
+                      nodeSelector:
+                        description: selector for the job
+                        type: string
                     type: object
                   createsim:
                     description: CreateSim holds the createsim job
@@ -179,6 +182,9 @@ spec:
                       interactive:
                         description: Run in interactive mode for debugging
                         type: boolean
+                      nodeSelector:
+                        description: selector for the job
+                        type: string
                     type: object
                 type: object
               labels:
@@ -300,6 +306,9 @@ spec:
                       to store ML generated patches
                     format: int32
                     type: integer
+                  nodeSelector:
+                    description: selector for the workflow manager
+                    type: string
                   nodes:
                     default: 6
                     description: |-
@@ -478,6 +487,9 @@ spec:
                   interactive:
                     description: Run in interactive debug mode (sleep infinity)
                     type: boolean
+                  nodeSelector:
+                    description: selector for the mlserver
+                    type: string
                   replicas:
                     default: 1
                     description: |-
@@ -567,6 +579,9 @@ spec:
                           These are for Campaign 1
                         type: string
                     type: object
+                  workdir:
+                    description: Custom working directory for server
+                    type: string
                 type: object
               paths:
                 description: Mummi software paths, root, etc.
@@ -619,6 +634,9 @@ spec:
                     default: IfNotPresent
                     description: Image pull policy (e.g., Always, Never, etc.)
                     type: string
+                  nodeSelector:
+                    description: selector for rabbitmq
+                    type: string
                   pass:
                     default: dinosaur
                     description: Pass (these can be generated secrets if needed for
@@ -667,6 +685,9 @@ spec:
                   name:
                     default: registry
                     description: Name for the registry (defaults to registry)
+                    type: string
+                  nodeSelector:
+                    description: selector for the registry
                     type: string
                   plainHttp:
                     description: Assume the registry doesn't use plain http
